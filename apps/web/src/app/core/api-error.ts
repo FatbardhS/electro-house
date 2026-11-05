@@ -22,6 +22,10 @@ export function toApiError(err: unknown): ApiError {
     if (err.status === 0) {
       return new ApiError('Cannot reach the server. Check your connection and try again.', 0);
     }
+    if (err.status === 502 || err.status === 503 || err.status === 504) {
+      // A gateway/proxy answered because the API itself is down or restarting.
+      return new ApiError('The server is not available right now. Please try again in a moment.', err.status);
+    }
     const body = err.error as Partial<ApiErrorDto> | null;
     if (body && typeof body.message === 'string') {
       return new ApiError(body.message, err.status, body.fields ?? {});
