@@ -1,0 +1,5 @@
+# Binary files: never convert line endings (PDF byte offsets must stay exact)
+*.pdf binary
+*.png binary
+*.jpg binary
+*.ico binary
