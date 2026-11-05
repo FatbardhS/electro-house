@@ -17,9 +17,20 @@ const MAX_CANVAS_PIXELS = 16_000_000;
 /** Re-render this long after the last zoom/pan change; until then the old bitmap is CSS-transformed. */
 const SETTLE_MS = 140;
 
+interface RenderJob {
+  page: PDFPageProxy;
+  view: ViewState;
+  size: Size;
+}
+
 /**
  * Background layer: renders the visible part of a PDF page onto a canvas under the drawing.
  * It receives a page and the shared view transform. It has no knowledge of electrical objects.
+ *
+ * Renders are serialised: a render in progress is never cancelled for a newer one. Cancelling a
+ * PDF.js render while the page's first operator list is still loading can leave the next render
+ * on that page waiting forever (the plan then never appears). Instead, requests that arrive during
+ * a render are coalesced and the latest one runs as soon as the current render finishes.
  */
 @Component({
   selector: 'app-pdf-layer',
@@ -38,11 +49,14 @@ export class PdfLayer implements OnDestroy {
 
   private readonly canvasRef = viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
 
-  /** View and page the visible bitmap was rendered for. */
-  private rendered: { view: ViewState; page: PDFPageProxy } | null = null;
+  /** What the visible bitmap was rendered for. */
+  private rendered: RenderJob | null = null;
+  /** Latest requested render not started yet (coalesced). */
+  private queued: RenderJob | null = null;
+  private running = false;
   private task: RenderTask | null = null;
   private timer?: ReturnType<typeof setTimeout>;
-  private generation = 0;
+  private destroyed = false;
 
   constructor() {
     effect(() => {
@@ -54,38 +68,56 @@ export class PdfLayer implements OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.destroyed = true;
     clearTimeout(this.timer);
+    this.queued = null;
     this.task?.cancel();
   }
 
   private onChange(page: PDFPageProxy | null, view: ViewState | null, size: Size): void {
     const canvas = this.canvasRef().nativeElement;
+    clearTimeout(this.timer);
     if (!page || !view || size.width < 1 || size.height < 1) {
+      this.queued = null;
       canvas.style.visibility = 'hidden';
       return;
     }
+    const job: RenderJob = { page, view, size };
     const r = this.rendered;
     if (r && r.page === page && r.view.rotation === view.rotation) {
       // Instant feedback: move/scale the existing bitmap, then re-render sharply when the gesture settles.
       const k = view.zoom / r.view.zoom;
-      const tx = view.pan.x - r.view.pan.x * k;
-      const ty = view.pan.y - r.view.pan.y * k;
-      canvas.style.transform = `translate(${tx}px, ${ty}px) scale(${k})`;
+      canvas.style.transform = `translate(${view.pan.x - r.view.pan.x * k}px, ${view.pan.y - r.view.pan.y * k}px) scale(${k})`;
       canvas.style.visibility = 'visible';
-      clearTimeout(this.timer);
-      this.timer = setTimeout(() => void this.render(page, view, size), SETTLE_MS);
+      this.timer = setTimeout(() => this.request(job), SETTLE_MS);
     } else {
-      // New page or rotation: the old bitmap cannot be reused.
-      canvas.style.visibility = r ? canvas.style.visibility : 'hidden';
-      clearTimeout(this.timer);
-      void this.render(page, view, size);
+      // New page or rotation: the old bitmap cannot be reused; hide it until the new one is ready.
+      canvas.style.visibility = 'hidden';
+      this.request(job);
     }
   }
 
-  private async render(page: PDFPageProxy, view: ViewState, size: Size): Promise<void> {
-    const gen = ++this.generation;
-    this.task?.cancel();
+  /** Queues a render; starts it now unless one is running, in which case it runs right after. */
+  private request(job: RenderJob): void {
+    this.queued = job;
+    if (!this.running) void this.drain();
+  }
 
+  private async drain(): Promise<void> {
+    this.running = true;
+    try {
+      while (this.queued && !this.destroyed) {
+        const job = this.queued;
+        this.queued = null;
+        await this.render(job);
+      }
+    } finally {
+      this.running = false;
+    }
+  }
+
+  private async render(job: RenderJob): Promise<void> {
+    const { page, view, size } = job;
     let dpr = window.devicePixelRatio || 1;
     const area = size.width * size.height * dpr * dpr;
     if (area > MAX_CANVAS_PIXELS) dpr *= Math.sqrt(MAX_CANVAS_PIXELS / area);
@@ -96,7 +128,10 @@ export class PdfLayer implements OnDestroy {
     off.width = width;
     off.height = height;
     const ctx = off.getContext('2d', { alpha: true });
-    if (!ctx) return;
+    if (!ctx) {
+      this.renderError.emit('The plan could not be drawn: this browser could not create a drawing canvas.');
+      return;
+    }
 
     // Paper: white only where the page is, so the workspace around it stays dark.
     const rect = pageScreenRect(view);
@@ -116,11 +151,14 @@ export class PdfLayer implements OnDestroy {
     try {
       await this.task.promise;
     } catch (err) {
-      if ((err as { name?: string }).name === 'RenderingCancelledException') return;
-      if (gen === this.generation) this.renderError.emit(`The plan could not be drawn: ${(err as Error).message}`);
+      if ((err as { name?: string }).name === 'RenderingCancelledException' || this.destroyed) return;
+      this.renderError.emit(`The plan could not be drawn: ${(err as Error).message}`);
       return;
+    } finally {
+      this.task = null;
     }
-    if (gen !== this.generation) return;
+    // A newer request is waiting: skip showing this one; the loop renders the newer one next.
+    if (this.destroyed || this.queued) return;
 
     const canvas = this.canvasRef().nativeElement;
     canvas.width = width;
@@ -130,6 +168,6 @@ export class PdfLayer implements OnDestroy {
     canvas.getContext('2d')?.drawImage(off, 0, 0);
     canvas.style.transform = 'none';
     canvas.style.visibility = 'visible';
-    this.rendered = { view, page };
+    this.rendered = job;
   }
 }
