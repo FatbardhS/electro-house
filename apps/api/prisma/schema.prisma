@@ -1,0 +1,154 @@
+// Electro House database schema. See docs/ARCHITECTURE.md §4.
+// Every business table is scoped to an Organization (the paying customer).
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ── Accounts & tenancy ────────────────────────────────────────
+
+model Organization {
+  id        String       @id @default(uuid()) @db.Uuid
+  name      String
+  createdAt DateTime     @default(now())
+  members   Membership[]
+  clients   Client[]
+  projects  Project[]
+  files     StoredFile[]
+}
+
+model User {
+  id           String       @id @default(uuid()) @db.Uuid
+  email        String       @unique
+  name         String
+  passwordHash String
+  createdAt    DateTime     @default(now())
+  memberships  Membership[]
+  sessions     Session[]
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model Membership {
+  organizationId String       @db.Uuid
+  userId         String       @db.Uuid
+  role           MemberRole   @default(OWNER)
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId, userId])
+  @@index([userId])
+}
+
+/// Server-side session. `tokenHash` is the SHA-256 of the random cookie token; the raw token is never stored.
+model Session {
+  id             String   @id @default(uuid()) @db.Uuid
+  tokenHash      String   @unique
+  userId         String   @db.Uuid
+  organizationId String   @db.Uuid
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ── Clients & projects ────────────────────────────────────────
+
+model Client {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  name           String
+  email          String?
+  phone          String?
+  address        String?
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  projects       Project[]
+
+  @@index([organizationId, name])
+}
+
+enum ProjectStatus {
+  PLANNING
+  IN_PROGRESS
+  COMPLETED
+}
+
+model Project {
+  id              String        @id @default(uuid()) @db.Uuid
+  organizationId  String        @db.Uuid
+  clientId        String        @db.Uuid
+  name            String
+  propertyAddress String?
+  description     String?
+  status          ProjectStatus @default(PLANNING)
+  settings        Json          @default("{}")
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client          Client        @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  floors          Floor[]
+
+  @@index([organizationId, clientId])
+  @@index([organizationId, updatedAt])
+}
+
+// ── Floors & plan files ───────────────────────────────────────
+
+model Floor {
+  id                    String      @id @default(uuid()) @db.Uuid
+  projectId             String      @db.Uuid
+  name                  String
+  sortOrder             Int
+  planFileId            String?     @db.Uuid
+  planPage              Int         @default(1)
+  /// 0 | 90 | 180 | 270. A view setting; never applied to stored coordinates.
+  planRotation          Int         @default(0)
+  /// Validated by `calibrationSchema` in @electro/shared. Null = not calibrated.
+  calibration           Json?
+  calibrationNeedsCheck Boolean     @default(false)
+  /// Protects the plan page and an existing calibration from accidental changes.
+  backgroundLocked      Boolean     @default(false)
+  /// Incremented on every saved change; used for optimistic concurrency (409 on mismatch).
+  revision              Int         @default(0)
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  project               Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  planFile              StoredFile? @relation(fields: [planFileId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, sortOrder])
+}
+
+model StoredFile {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  storageKey     String       @unique
+  originalName   String
+  mimeType       String
+  sizeBytes      Int
+  pageCount      Int
+  sha256         String
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  floors         Floor[]
+
+  @@index([organizationId])
+}
+
+// Layer, Component and Wire tables (docs/ARCHITECTURE.md §4) are added in Phase 2–3 migrations,
+// when the code that uses them exists.

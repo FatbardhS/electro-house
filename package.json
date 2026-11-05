@@ -1,0 +1,19 @@
+{
+  "name": "electro-house",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "build:shared": "npm run build -w @electro/shared",
+    "dev:api": "npm run start:dev -w @electro/api",
+    "dev:web": "npm run start -w @electro/web",
+    "build": "npm run build -w @electro/shared && npm run build -w @electro/api && npm run build -w @electro/web",
+    "test": "npm run test -w @electro/shared && npm run test -w @electro/api && npm run test -w @electro/web",
+    "test:e2e": "npm run test:e2e -w @electro/api"
+  }
+}

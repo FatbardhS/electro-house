@@ -1,0 +1,153 @@
+<header class="toolbar">
+  <a class="btn btn-sm btn-ghost" [routerLink]="['/projects', projectId()]" title="Back to project">←</a>
+  <div class="title">
+    <span class="project">{{ project.hasValue() ? project.value().name : '…' }}</span>
+    @if (project.hasValue()) {
+      <span class="faint">{{ project.value().clientName }}</span>
+    }
+  </div>
+
+  @if (project.hasValue()) {
+    <select class="input floor-select" aria-label="Floor" [value]="floorId()" (change)="switchFloor($any($event.target).value)">
+      @for (f of project.value().floors; track f.id) {
+        <option [value]="f.id" [selected]="f.id === floorId()">{{ f.name }}{{ f.planFile ? '' : ' (no plan)' }}</option>
+      }
+    </select>
+  }
+
+  <div class="sep"></div>
+
+  <div class="group" role="group" aria-label="Zoom">
+    <button class="btn btn-sm btn-icon" type="button" (click)="viewport.zoomBy(0.8)" title="Zoom out (−)" [disabled]="!viewport.view()">−</button>
+    <span class="zoom mono">{{ viewport.zoomPercent() }}%</span>
+    <button class="btn btn-sm btn-icon" type="button" (click)="viewport.zoomBy(1.25)" title="Zoom in (+)" [disabled]="!viewport.view()">+</button>
+    <button class="btn btn-sm" type="button" (click)="viewport.fit()" title="Fit plan to screen (F)" [disabled]="!viewport.view()">Fit</button>
+  </div>
+
+  <div class="group" role="group" aria-label="Rotate">
+    <button class="btn btn-sm btn-icon" type="button" (click)="rotate(-90)" title="Rotate left (Shift+R)" [disabled]="!floor()?.planFile">⟲</button>
+    <button class="btn btn-sm btn-icon" type="button" (click)="rotate(90)" title="Rotate right (R)" [disabled]="!floor()?.planFile">⟳</button>
+  </div>
+
+  @if (pageNumbers().length > 1) {
+    <label class="page-select">
+      <span class="faint">Page</span>
+      <select class="input" [value]="floor()?.planPage" [disabled]="locked()" (change)="setPage(+$any($event.target).value)"
+              [title]="locked() ? 'Unlock the plan to change its page' : 'Which PDF page is this floor’s plan'">
+        @for (n of pageNumbers(); track n) {
+          <option [value]="n" [selected]="n === floor()?.planPage">{{ n }} / {{ pageNumbers().length }}</option>
+        }
+      </select>
+    </label>
+  }
+
+  <div class="spacer"></div>
+
+  @if (sync(); as s) {
+    <span class="save save-{{ s.status() }}" role="status" [title]="s.message() ?? ''">
+      <span class="dot"></span>{{ saveLabel() }}
+    </span>
+  }
+  <button class="btn btn-sm" type="button" (click)="toggleFullscreen()" [title]="isFullscreen() ? 'Exit fullscreen' : 'Fullscreen'">
+    {{ isFullscreen() ? 'Exit fullscreen' : 'Fullscreen' }}
+  </button>
+</header>
+
+<div class="body">
+  <nav class="rail" aria-label="Tools">
+    <button class="tool" type="button" [class.active]="tools.tool() === 'pan'" (click)="setTool('pan')" title="Pan (H). Middle mouse or Space+drag pans with any tool.">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V12M11 11.5v-8a1.5 1.5 0 0 1 3 0V12M14 6.5a1.5 1.5 0 0 1 3 0V13M17 8.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-1.5a6 6 0 0 1-5-2.7L5 15a1.6 1.6 0 0 1 2.6-1.9L8 14"/></svg>
+      <span>Pan</span>
+    </button>
+    <button class="tool" type="button" [class.active]="tools.tool() === 'measure'" (click)="setTool('measure')" [disabled]="!floor()?.planFile" title="Measure (M)">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17 17 3l4 4L7 21z M7 9l2 2M10 6l2 2M13 3.5l1.5 1.5M4 12l2 2"/></svg>
+      <span>Measure</span>
+    </button>
+    <button class="tool" type="button" [class.active]="tools.tool() === 'calibrate'" (click)="setTool('calibrate')" [disabled]="!floor()?.planFile || calibrationLocked()" [title]="calibrationLocked() ? 'Unlock the plan to change the scale' : 'Calibrate scale (C)'">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h16M4 8v8M20 8v8M8 12v-2M12 12V9M16 12v-2"/></svg>
+      <span>Scale</span>
+    </button>
+    <div class="rail-sep"></div>
+    <button class="tool" type="button" [class.active]="showGrid()" (click)="toggleGrid()" title="Grid (G)">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4zM4 9.3h16M4 14.6h16M9.3 4v16M14.6 4v16"/></svg>
+      <span>Grid</span>
+    </button>
+    <button class="tool" type="button" [class.active]="locked()" (click)="toggleLock()" [disabled]="!floor()" [title]="locked() ? 'Plan locked: page and scale cannot change. Click to unlock.' : 'Lock plan page and scale'">
+      @if (locked()) {
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3"/></svg>
+      } @else {
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 6.8-1.2"/></svg>
+      }
+      <span>{{ locked() ? 'Locked' : 'Unlocked' }}</span>
+    </button>
+  </nav>
+
+  <main class="stage">
+    @if (session.error(); as err) {
+      <app-error-state [message]="message(err)" (retry)="session.reload()" />
+    } @else if (session.isLoading() && !floor()) {
+      <app-loading [label]="pdfProgress() !== null ? 'Loading plan… ' + ((pdfProgress() ?? 0) * 100).toFixed(0) + '%' : 'Loading floor…'" />
+    } @else if (floor(); as f) {
+      @if (!f.planFile) {
+        <app-empty-state heading="No plan uploaded for {{ f.name }}" text="Upload the architectural PDF for this floor to start planning on it.">
+          <input #file type="file" accept="application/pdf,.pdf" hidden (change)="upload(file)" />
+          @if (uploadState(); as u) {
+            <span class="muted">Uploading… {{ (u.progress * 100).toFixed(0) }}%</span>
+          } @else {
+            <button class="btn btn-primary" type="button" (click)="file.click()">Upload PDF</button>
+          }
+          @if (uploadError(); as e) { <div class="banner banner-error">{{ e }}</div> }
+        </app-empty-state>
+      } @else {
+        <app-workspace class="workspace" [page]="page.hasValue() ? page.value() : null" [showGrid]="showGrid()"
+                       [calibration]="calibration()" [calibrationLocked]="calibrationLocked()" (renderError)="renderError.set($event)" />
+        @if (page.error(); as err) {
+          <div class="overlay-msg"><app-error-state [message]="'The plan page could not be opened: ' + message(err)" (retry)="page.reload()" /></div>
+        }
+        @if (renderError(); as e) {
+          <div class="banner banner-error floating" role="alert">{{ e }}
+            <button class="btn btn-sm" type="button" (click)="renderError.set(null)">Dismiss</button>
+          </div>
+        }
+        @if (!calibration() && tools.tool() !== 'calibrate') {
+          <div class="banner banner-warn floating">
+            This floor is not calibrated yet. Set the scale before measuring.
+            <button class="btn btn-sm" type="button" (click)="setTool('calibrate')">Calibrate</button>
+          </div>
+        }
+      }
+    }
+  </main>
+
+  <aside class="panel" aria-label="Properties">
+    @if (floor(); as f) {
+      <section>
+        <h3>Floor</h3>
+        <div class="kv"><span class="faint">Name</span><span>{{ f.name }}</span></div>
+        @if (f.planFile) {
+          <div class="kv"><span class="faint">Plan</span><span class="ellipsis" [title]="f.planFile.originalName">{{ f.planFile.originalName }}</span></div>
+          <div class="kv"><span class="faint">Page</span><span>{{ f.planPage }} of {{ f.planFile.pageCount }}</span></div>
+          <div class="kv"><span class="faint">Rotation</span><span>{{ f.planRotation }}°</span></div>
+          @if (viewport.view(); as v) {
+            <div class="kv"><span class="faint">Sheet</span><span class="mono">{{ (v.page.width / 72 * 25.4).toFixed(0) }} × {{ (v.page.height / 72 * 25.4).toFixed(0) }} mm</span></div>
+          }
+        }
+      </section>
+      @if (f.planFile) {
+        <app-calibration-panel [floor]="f" [locked]="calibrationLocked()" [zoom]="viewport.view()?.zoom ?? 1"
+                               (applied)="applyCalibration($event)" (confirmed)="confirmCalibration()" />
+        <app-measure-panel [calibration]="calibration()" />
+      }
+      @if (sync()?.message(); as m) {
+        <div class="banner" [class.banner-warn]="sync()?.status() !== 'error'" [class.banner-error]="sync()?.status() === 'error'">{{ m }}</div>
+      }
+      <section class="shortcuts">
+        <h3>Shortcuts</h3>
+        <div><kbd>Wheel</kbd> zoom at cursor</div>
+        <div><kbd>Space</kbd>+drag or middle mouse: pan</div>
+        <div><kbd>F</kbd> fit · <kbd>R</kbd> rotate · <kbd>G</kbd> grid</div>
+        <div><kbd>H</kbd> pan · <kbd>M</kbd> measure · <kbd>C</kbd> scale</div>
+      </section>
+    }
+  </aside>
+</div>

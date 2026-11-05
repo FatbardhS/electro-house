@@ -1,0 +1,28 @@
+# Local development services. Production uses managed PostgreSQL and S3-compatible storage.
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: electro
+      POSTGRES_PASSWORD: electro
+      POSTGRES_DB: electro
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: electro
+      MINIO_ROOT_PASSWORD: electro-dev-secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+
+volumes:
+  pgdata:
+  miniodata:
