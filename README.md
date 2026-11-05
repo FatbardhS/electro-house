@@ -3,7 +3,7 @@
 Electrical installation planner for professional electricians: upload architectural floor plans (PDF),
 organise them by client → project → floor, and plan the installation on top of them.
 
-**Status:** Phase 1 (foundation) and Phase 2 (electrical editor) complete. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design and roadmap.
+**Status:** Phases 1–3 complete (foundation, electrical editor, wiring engine). See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design and roadmap.
 
 ## Stack
 

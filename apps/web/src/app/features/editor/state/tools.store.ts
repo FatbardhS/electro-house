@@ -1,7 +1,13 @@
 import { Injectable, computed, signal } from '@angular/core';
-import type { Vec2 } from '@electro/shared';
+import { DEFAULT_CABLE, type CableDto, type Vec2, type WireEndDto } from '@electro/shared';
 
-export type ToolId = 'select' | 'place' | 'pan' | 'measure' | 'calibrate';
+export type ToolId = 'select' | 'place' | 'wire' | 'pan' | 'measure' | 'calibrate';
+
+/** A wire being drawn: its start and the bend points clicked so far. */
+export interface WireDraft {
+  from: WireEndDto;
+  points: Vec2[];
+}
 
 export type CalibrationStep = 'pick-first' | 'pick-second' | 'enter-distance';
 
@@ -18,6 +24,12 @@ export class ToolsStore {
   readonly snap = signal(readSnapPref());
   /** Box selection rectangle in screen coordinates while dragging. */
   readonly selectBox = signal<{ a: Vec2; b: Vec2 } | null>(null);
+  /** Wire tool: route in progress. */
+  readonly wireDraft = signal<WireDraft | null>(null);
+  /** Wire tool: draw horizontal/vertical segments (Shift inverts while held). */
+  readonly wireOrtho = signal(true);
+  /** Cable used for new wires (the last cable chosen in the properties panel). */
+  readonly wireCable = signal<CableDto>({ ...DEFAULT_CABLE });
   /** Cursor position in plan coordinates while over the plan; null when outside. */
   readonly cursor = signal<Vec2 | null>(null);
   /** True while Shift is held: constrain to horizontal/vertical on screen. */
@@ -39,6 +51,7 @@ export class ToolsStore {
     if (this.tool() === tool) return;
     this.tool.set(tool);
     this.selectBox.set(null);
+    this.wireDraft.set(null);
     this.clearMeasure();
     this.calibrationPoints.set([]);
   }

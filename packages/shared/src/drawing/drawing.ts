@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { COMPONENT_TYPES, MM_TO_PT, componentType, propertiesSchema } from '../catalog/catalog.js';
 import { LAYER_KEYS, type LayerKey } from '../catalog/types.js';
 import type { Vec2 } from '../geometry/vec.js';
+import { wireSchema, type WireDto } from './wires.js';
 
 /** A placed electrical component. Position is in plan coordinates (PDF points of the plan page). */
 export interface ComponentDto {
@@ -30,6 +31,7 @@ export interface DrawingDto {
   revision: number;
   layers: LayerStateDto[];
   components: ComponentDto[];
+  wires: WireDto[];
 }
 
 /** Plan coordinates are bounded generously (an A0 sheet is ~3370 pt wide). */
@@ -52,6 +54,8 @@ export const componentSchema = z.object({
 export const drawingOpSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('upsert'), component: componentSchema }),
   z.object({ op: z.literal('delete'), id: z.uuid() }),
+  z.object({ op: z.literal('upsertWire'), wire: wireSchema }),
+  z.object({ op: z.literal('deleteWire'), id: z.uuid() }),
   z.object({
     op: z.literal('layer'),
     key: z.enum(LAYER_KEYS),

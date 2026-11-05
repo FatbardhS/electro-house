@@ -1,5 +1,5 @@
 import { signal } from '@angular/core';
-import type { ComponentDto, DrawingDto, DrawingOp, DrawingPatchInput, LayerKey } from '@electro/shared';
+import type { ComponentDto, DrawingDto, DrawingOp, DrawingPatchInput, LayerKey, WireDto } from '@electro/shared';
 import { MAX_OPS_PER_PATCH } from '@electro/shared';
 import { toApiError, type ApiError } from '../../../core/api-error';
 import type { Journal } from './journal';
@@ -12,7 +12,7 @@ export interface DrawingApi {
 
 /** Pending changes, keyed so that a later change to the same object replaces the earlier one. */
 interface PendingOps {
-  components: Record<string, DrawingOp>; // id → upsert | delete
+  components: Record<string, DrawingOp>; // object id → upsert | delete | upsertWire | deleteWire
   layers: Partial<Record<LayerKey, { visible?: boolean; locked?: boolean }>>;
 }
 
@@ -70,7 +70,8 @@ export class DrawingSync {
     if (this.disposed || ops.length === 0) return;
     for (const op of ops) {
       if (op.op === 'upsert') this.pending.components[op.component.id] = op;
-      else if (op.op === 'delete') this.pending.components[op.id] = op;
+      else if (op.op === 'delete' || op.op === 'deleteWire') this.pending.components[op.id] = op;
+      else if (op.op === 'upsertWire') this.pending.components[op.wire.id] = op;
       else {
         const prev = this.pending.layers[op.key] ?? {};
         this.pending.layers[op.key] = {
@@ -179,7 +180,8 @@ export class DrawingSync {
   private queueSilently(ops: DrawingOp[]): void {
     for (const op of ops) {
       if (op.op === 'upsert') this.pending.components[op.component.id] = op;
-      else if (op.op === 'delete') this.pending.components[op.id] = op;
+      else if (op.op === 'delete' || op.op === 'deleteWire') this.pending.components[op.id] = op;
+      else if (op.op === 'upsertWire') this.pending.components[op.wire.id] = op;
       else
         this.pending.layers[op.key] = {
           ...(this.pending.layers[op.key] ?? {}),
@@ -221,6 +223,16 @@ export function applyOps(components: ComponentDto[], ops: DrawingOp[]): Componen
   for (const op of ops) {
     if (op.op === 'upsert') byId.set(op.component.id, op.component as ComponentDto);
     else if (op.op === 'delete') byId.delete(op.id);
+  }
+  return [...byId.values()];
+}
+
+/** Applies wire ops to a wire list. */
+export function applyWireOps(wires: WireDto[], ops: DrawingOp[]): WireDto[] {
+  const byId = new Map(wires.map((w) => [w.id, w]));
+  for (const op of ops) {
+    if (op.op === 'upsertWire') byId.set(op.wire.id, op.wire as WireDto);
+    else if (op.op === 'deleteWire') byId.delete(op.id);
   }
   return [...byId.values()];
 }

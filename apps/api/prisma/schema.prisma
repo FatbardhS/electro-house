@@ -134,6 +134,7 @@ model Floor {
   planFile              StoredFile? @relation(fields: [planFileId], references: [id], onDelete: SetNull)
   layers                Layer[]
   components            Component[]
+  wires                 Wire[]
 
   @@index([projectId, sortOrder])
 }
@@ -186,6 +187,38 @@ model Component {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   floor         Floor    @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  wiresFrom     Wire[]   @relation("WireFrom")
+  wiresTo       Wire[]   @relation("WireTo")
 
   @@index([floorId])
+}
+
+/// A cable route. Each end is either connected to a component (a real foreign key, so the connection is data,
+/// not just a drawn line) or a free point. Interior bend points are stored as JSON [{x,y}] in plan coordinates.
+model Wire {
+  id              String     @id @db.Uuid
+  floorId         String     @db.Uuid
+  label           String?
+  fromComponentId String?    @db.Uuid
+  fromPortId      String?
+  fromX           Float
+  fromY           Float
+  toComponentId   String?    @db.Uuid
+  toPortId        String?
+  toX             Float
+  toY             Float
+  points          Json       @default("[]")
+  /// Cable data (type, conductors, cross-section, voltage, installation method, colour, line style).
+  cable           Json
+  circuitId       String?    @db.Uuid
+  description     String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  floor           Floor      @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  fromComponent   Component? @relation("WireFrom", fields: [fromComponentId], references: [id], onDelete: Restrict)
+  toComponent     Component? @relation("WireTo", fields: [toComponentId], references: [id], onDelete: Restrict)
+
+  @@index([floorId])
+  @@index([fromComponentId])
+  @@index([toComponentId])
 }

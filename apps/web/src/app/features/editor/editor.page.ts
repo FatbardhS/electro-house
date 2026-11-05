@@ -10,6 +10,7 @@ import {
   resource,
   signal,
   untracked,
+  viewChild,
 } from '@angular/core';
 import { httpResource } from '@angular/common/http';
 import { Router, RouterLink } from '@angular/router';
@@ -17,8 +18,13 @@ import {
   MAX_PLAN_FILE_BYTES,
   MM_TO_PT,
   PLAN_ROTATIONS,
+  formatMetres,
   relabelCopies,
   uuidv7,
+  syncEnds,
+  wireLengthUnits,
+  type WireDto,
+  type WireEndDto,
   type Calibration,
   type ComponentDto,
   type ProjectDto,
@@ -32,6 +38,7 @@ import { LayersPanel } from './panels/layers-panel';
 import { LibraryPanel } from './panels/library-panel';
 import { MeasurePanel } from './panels/measure-panel';
 import { PropertiesPanel } from './panels/properties-panel';
+import { WirePanel } from './panels/wire-panel';
 import { openPdf, planPageSize, type OpenedPdf } from './pdf/pdf-document';
 import { DrawingSync } from './state/drawing-sync';
 import { DrawingStore } from './state/drawing.store';
@@ -59,7 +66,7 @@ const SAVE_RANK: Record<SaveStatus, number> = { saved: 0, pending: 1, saving: 2,
 const GRID_KEY = 'eh.grid';
 
 /** In-memory clipboard shared by all floors in this browser tab. */
-let clipboard: ComponentDto[] = [];
+let clipboard: { components: ComponentDto[]; wires: WireDto[] } = { components: [], wires: [] };
 
 @Component({
   selector: 'app-editor-page',
@@ -71,6 +78,7 @@ let clipboard: ComponentDto[] = [];
     LibraryPanel,
     LayersPanel,
     PropertiesPanel,
+    WirePanel,
     SymbolDefs,
     LoadingState,
     ErrorState,
@@ -89,6 +97,7 @@ export class EditorPage {
   protected readonly viewport = inject(ViewportStore);
   protected readonly tools = inject(ToolsStore);
   protected readonly drawing = inject(DrawingStore);
+  private readonly workspace = viewChild<Workspace>('ws');
 
   readonly projectId = input.required<string>();
   readonly floorId = input.required<string>();
@@ -164,6 +173,12 @@ export class EditorPage {
   });
   protected readonly saveMessage = computed(() => this.drawingSync()?.message() ?? this.sync()?.message() ?? null);
   protected readonly rotations = PLAN_ROTATIONS;
+  protected readonly totalWireLength = computed(() => {
+    const lookup = this.drawing.lookup();
+    const units = this.drawing.wires().reduce((s, w) => s + wireLengthUnits(w, lookup), 0);
+    const cal = this.calibration();
+    return cal ? formatMetres(units * cal.metresPerUnit) : 'not calibrated';
+  });
   protected readonly pageNumbers = computed(() => {
     const s = this.session.hasValue() ? this.session.value() : null;
     return s?.pdf ? Array.from({ length: s.pdf.doc.numPages }, (_, i) => i + 1) : [];
@@ -246,53 +261,94 @@ export class EditorPage {
     this.flash(label ? `Redo: ${label}` : 'Nothing to redo');
   }
 
+  /** Selected components plus selected wires, deep-copied with wire ends resolved to positions. */
+  private selectionSnapshot(): { components: ComponentDto[]; wires: WireDto[] } {
+    const lookup = this.drawing.lookup();
+    return {
+      components: this.drawing.selected().map((c) => structuredClone(c)),
+      wires: this.drawing.selectedWires().map((w) => syncEnds(structuredClone(w), lookup)),
+    };
+  }
+
   private copySelection(): void {
-    const sel = this.drawing.selected();
-    if (!sel.length) return;
-    clipboard = sel.map((c) => structuredClone(c));
-    this.flash(`Copied ${sel.length} component${sel.length === 1 ? '' : 's'}`);
+    const snap = this.selectionSnapshot();
+    const n = snap.components.length + snap.wires.length;
+    if (!n) return;
+    clipboard = snap;
+    this.flash(`Copied ${n} object${n === 1 ? '' : 's'}`);
+  }
+
+  /**
+   * New copies of components and wires, moved by (dx, dy), with new ids and labels. Wire ends that were
+   * connected to a copied component connect to its copy; ends connected to anything else become free ends.
+   */
+  private cloneSet(
+    src: { components: ComponentDto[]; wires: WireDto[] },
+    dx: number,
+    dy: number,
+    existing: readonly ComponentDto[],
+  ): { components: ComponentDto[]; wires: WireDto[] } {
+    const idMap = new Map<string, string>();
+    const comps = src.components.map((c) => {
+      const id = uuidv7();
+      idMap.set(c.id, id);
+      return { ...structuredClone(c), id, x: c.x + dx, y: c.y + dy };
+    });
+    const shiftEnd = (e: WireEndDto): WireEndDto => {
+      const mapped = e.componentId ? idMap.get(e.componentId) : undefined;
+      return mapped
+        ? { componentId: mapped, portId: e.portId, x: e.x + dx, y: e.y + dy }
+        : { componentId: null, portId: null, x: e.x + dx, y: e.y + dy };
+    };
+    const wires = src.wires.map((w) => ({
+      ...structuredClone(w),
+      id: uuidv7(),
+      from: shiftEnd(w.from),
+      to: shiftEnd(w.to),
+      points: w.points.map((p) => ({ x: p.x + dx, y: p.y + dy })),
+    }));
+    return { components: relabelCopies(comps, existing), wires };
   }
 
   /** Pastes the clipboard centred on the cursor, or offset by 5 mm if the cursor is not over the plan. */
-  private paste(source = clipboard, label = 'Paste'): void {
-    if (!source.length) return;
-    const cx = source.reduce((s, c) => s + c.x, 0) / source.length;
-    const cy = source.reduce((s, c) => s + c.y, 0) / source.length;
+  private paste(): void {
+    const src = clipboard;
+    const pts = [...src.components.map((c) => ({ x: c.x, y: c.y })), ...src.wires.flatMap((w) => [w.from, w.to])];
+    if (!pts.length) return;
+    const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+    const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
     const cursor = this.tools.cursor();
     const dx = cursor ? cursor.x - cx : 5 * MM_TO_PT;
     const dy = cursor ? cursor.y - cy : 5 * MM_TO_PT;
-    const created: ComponentDto[] = [];
-    for (const c of source) {
-      const copy: ComponentDto = { ...structuredClone(c), id: uuidv7(), x: c.x + dx, y: c.y + dy };
-      created.push(copy);
-    }
-    this.drawing.add(relabelCopies(created, this.drawing.components()), created.length === 1 ? `${label} component` : `${label} ${created.length} components`);
+    const copy = this.cloneSet(src, dx, dy, this.drawing.components());
+    const n = copy.components.length + copy.wires.length;
+    this.drawing.add(copy.components, n === 1 ? 'Paste' : `Paste ${n} objects`, copy.wires);
   }
 
   private duplicate(): void {
-    const sel = this.drawing.selected();
-    if (!sel.length) return;
+    const snap = this.selectionSnapshot();
+    const n = snap.components.length + snap.wires.length;
+    if (!n) return;
     const offset = 5 * MM_TO_PT;
-    this.drawing.add(
-      relabelCopies(
-        sel.map((c) => ({ ...structuredClone(c), id: uuidv7(), x: c.x + offset, y: c.y + offset })),
-        this.drawing.components(),
-      ),
-      sel.length === 1 ? 'Duplicate component' : `Duplicate ${sel.length} components`,
-    );
+    const copy = this.cloneSet(snap, offset, offset, this.drawing.components());
+    this.drawing.add(copy.components, n === 1 ? 'Duplicate' : `Duplicate ${n} objects`, copy.wires);
   }
 
   /** Copies the selection to the same position on another floor (saved directly to that floor). */
   protected async copyToFloor(targetId: string): Promise<void> {
-    const sel = this.drawing.selected();
-    if (!sel.length) return;
+    const snap = this.selectionSnapshot();
+    const n = snap.components.length + snap.wires.length;
+    if (!n) return;
     const target = this.project.hasValue() ? this.project.value().floors.find((f) => f.id === targetId) : undefined;
     try {
       const d = await this.api.getDrawing(targetId);
-      const copies = relabelCopies(sel.map((c) => ({ ...structuredClone(c), id: uuidv7() })), d.components);
-      const ops = copies.map((component) => ({ op: 'upsert' as const, component }));
+      const copy = this.cloneSet(snap, 0, 0, d.components);
+      const ops = [
+        ...copy.components.map((component) => ({ op: 'upsert' as const, component })),
+        ...copy.wires.map((wire) => ({ op: 'upsertWire' as const, wire })),
+      ];
       await this.api.patchDrawing(targetId, { baseRevision: d.revision, ops });
-      this.flash(`Copied ${sel.length} component${sel.length === 1 ? '' : 's'} to ${target?.name ?? 'the other floor'}`);
+      this.flash(`Copied ${n} object${n === 1 ? '' : 's'} to ${target?.name ?? 'the other floor'}`);
     } catch (err) {
       this.flash(`Copy failed: ${toApiError(err).message}`);
     }
@@ -382,11 +438,15 @@ export class EditorPage {
     if (e.altKey) return;
 
     const tool = this.tools.tool();
-    const hasSel = this.drawing.selection().size > 0;
+    const hasSel = this.drawing.selectionCount() > 0;
     switch (e.key) {
       case 'v':
       case 'V':
         this.setTool('select');
+        break;
+      case 'w':
+      case 'W':
+        this.setTool('wire');
         break;
       case 'h':
       case 'H':
@@ -428,6 +488,7 @@ export class EditorPage {
         break;
       case 'Enter':
         if (tool === 'measure') this.tools.finishMeasure();
+        if (tool === 'wire') this.workspace()?.finishWire();
         break;
       case 'Delete':
         this.drawing.deleteSelected();
@@ -435,7 +496,10 @@ export class EditorPage {
       case 'Backspace':
         if (tool === 'measure') this.tools.undoMeasurePoint();
         else if (tool === 'calibrate') this.tools.resetCalibration();
-        else this.drawing.deleteSelected();
+        else if (tool === 'wire') {
+          const d = this.tools.wireDraft();
+          if (d) this.tools.wireDraft.set(d.points.length ? { ...d, points: d.points.slice(0, -1) } : null);
+        } else this.drawing.deleteSelected();
         break;
       case 'ArrowLeft':
       case 'ArrowRight':
@@ -446,6 +510,7 @@ export class EditorPage {
         break;
       case 'Escape':
         if (tool === 'measure' && this.tools.measurePoints().length) this.tools.clearMeasure();
+        else if (tool === 'wire' && this.tools.wireDraft()) this.tools.wireDraft.set(null);
         else if (tool !== 'select') this.setTool('select');
         else this.drawing.clearSelection();
         break;

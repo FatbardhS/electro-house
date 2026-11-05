@@ -304,3 +304,72 @@ describe('drawing (components and layers)', () => {
     await agent.patch(`/api/floors/${floor.id}/drawing`).send({ baseRevision: 0, ops: [{ op: 'upsert', component: a }] }).expect(200);
   });
 });
+
+describe('wires', () => {
+  async function setup(company: string) {
+    const { agent } = await signUp(company);
+    const client = (await agent.post('/api/clients').send({ name: 'C' })).body;
+    const project = (await agent.post('/api/projects').send({ clientId: client.id, name: 'P' })).body;
+    const floor = (await agent.post(`/api/projects/${project.id}/floors`).send({ name: 'Ground floor' })).body as FloorDto;
+    return { agent, floor };
+  }
+  const { createComponent, uuidv7, DEFAULT_CABLE } = shared;
+  const wireBetween = (a: { id: string; x: number; y: number }, b: { id: string; x: number; y: number }) => ({
+    id: uuidv7(),
+    label: 'W1',
+    from: { componentId: a.id, portId: 'p', x: a.x, y: a.y },
+    to: { componentId: b.id, portId: 'p', x: b.x, y: b.y },
+    points: [{ x: a.x, y: b.y }],
+    cable: { ...DEFAULT_CABLE },
+    circuitId: null,
+    description: null,
+  });
+
+  it('saves components and the wire between them in one batch and returns them exactly', async () => {
+    const { agent, floor } = await setup('Wire Save Co');
+    const sw = createComponent('switch.single', { x: 10, y: 10 }, uuidv7(), []);
+    const lamp = createComponent('light.ceiling', { x: 200, y: 300 }, uuidv7(), []);
+    const w = wireBetween(sw, lamp);
+    await agent
+      .patch(`/api/floors/${floor.id}/drawing`)
+      .send({ baseRevision: 0, ops: [{ op: 'upsertWire', wire: w }, { op: 'upsert', component: sw }, { op: 'upsert', component: lamp }] })
+      .expect(200);
+    const d = (await agent.get(`/api/floors/${floor.id}/drawing`)).body;
+    expect(d.wires).toEqual([w]);
+  });
+
+  it('refuses to delete a component that still has a wire attached, but allows deleting both together', async () => {
+    const { agent, floor } = await setup('Wire Delete Co');
+    const sw = createComponent('switch.single', { x: 10, y: 10 }, uuidv7(), []);
+    const lamp = createComponent('light.ceiling', { x: 200, y: 300 }, uuidv7(), []);
+    const w = wireBetween(sw, lamp);
+    await agent
+      .patch(`/api/floors/${floor.id}/drawing`)
+      .send({ baseRevision: 0, ops: [{ op: 'upsert', component: sw }, { op: 'upsert', component: lamp }, { op: 'upsertWire', wire: w }] })
+      .expect(200);
+    const res = await agent.patch(`/api/floors/${floor.id}/drawing`).send({ baseRevision: 1, ops: [{ op: 'delete', id: lamp.id }] }).expect(400);
+    expect(res.body.message).toMatch(/Disconnect or delete the wires/);
+    // Detaching the end in the same batch makes the delete valid.
+    const detached = { ...w, to: { componentId: null, portId: null, x: lamp.x, y: lamp.y } };
+    await agent
+      .patch(`/api/floors/${floor.id}/drawing`)
+      .send({ baseRevision: 1, ops: [{ op: 'upsertWire', wire: detached }, { op: 'delete', id: lamp.id }] })
+      .expect(200);
+    const d = (await agent.get(`/api/floors/${floor.id}/drawing`)).body;
+    expect(d.components.map((c: { id: string }) => c.id)).toEqual([sw.id]);
+    expect(d.wires[0].to.componentId).toBeNull();
+  });
+
+  it('rejects wires connected to components that are not on this floor', async () => {
+    const one = await setup('Wire Foreign A');
+    const other = await setup('Wire Foreign B');
+    const theirs = createComponent('switch.single', { x: 1, y: 1 }, uuidv7(), []);
+    await other.agent.patch(`/api/floors/${other.floor.id}/drawing`).send({ baseRevision: 0, ops: [{ op: 'upsert', component: theirs }] }).expect(200);
+    const mine = createComponent('light.ceiling', { x: 5, y: 5 }, uuidv7(), []);
+    const res = await one.agent
+      .patch(`/api/floors/${one.floor.id}/drawing`)
+      .send({ baseRevision: 0, ops: [{ op: 'upsert', component: mine }, { op: 'upsertWire', wire: wireBetween(theirs, mine) }] })
+      .expect(400);
+    expect(res.body.message).toMatch(/does not exist on this floor/);
+  });
+});

@@ -8,7 +8,8 @@ import {
   type Calibration,
   type Vec2,
 } from '@electro/shared';
-import { MM_TO_PT, componentType, hitRadius } from '@electro/shared';
+import { MM_TO_PT, componentType, dashArray, hitRadius, planToScreen as toScreenAt, portPosition, wireRoute } from '@electro/shared';
+import { wireHandles } from './wire-handles';
 import { ViewportStore } from '../viewport/viewport.store';
 import { ToolsStore } from '../state/tools.store';
 import { DrawingStore } from '../state/drawing.store';
@@ -47,6 +48,22 @@ export function componentTransform(c: { x: number; y: number; rotation: number }
           <rect class="page-outline" x="0" y="0" [attr.width]="page()!.width" [attr.height]="page()!.height"
                 vector-effect="non-scaling-stroke" />
 
+          <!-- Wires (drawn under the symbols, whose paper fill hides the wire ends) -->
+          <g class="wires" fill="none" stroke-linejoin="round" stroke-linecap="round">
+            @for (w of wireItems(); track w.id) {
+              @if (w.selected) {
+                <polyline class="wire-sel" [attr.points]="w.points" vector-effect="non-scaling-stroke" />
+              }
+              <polyline [attr.points]="w.points" [attr.stroke]="w.color" [attr.stroke-width]="wireWidth" [attr.stroke-dasharray]="w.dash" />
+              @if (w.label) {
+                <text class="label" [attr.x]="w.labelAt.x" [attr.y]="w.labelAt.y" [attr.font-size]="labelSize" [style.fill]="w.color">{{ w.label }}</text>
+              }
+            }
+            @if (draft(); as d) {
+              <polyline class="wire-draft" [attr.points]="d.points" [attr.stroke]="d.color" [attr.stroke-width]="wireWidth" />
+            }
+          </g>
+
           <!-- Electrical components, by layer, in draw order -->
           <g class="components">
             @for (c of items(); track c.id) {
@@ -65,6 +82,15 @@ export function componentTransform(c: { x: number; y: number; rotation: number }
             <g class="ghost" [attr.transform]="g.transform" [style.color]="g.color"><use [attr.href]="g.href" /></g>
           }
         </g>
+        @for (h of handles(); track $index) {
+          <circle [class]="'handle handle-' + h.kind" [attr.cx]="h.x" [attr.cy]="h.y" [attr.r]="h.kind === 'mid' ? 4 : 5" />
+        }
+        @if (draftLabel(); as l) {
+          <g class="measure" [attr.transform]="'translate(' + l.at.x + ' ' + l.at.y + ')'">
+            <rect x="10" y="-26" [attr.width]="l.text.length * 7.2 + 14" height="22" rx="4" />
+            <text x="17" y="-11">{{ l.text }}</text>
+          </g>
+        }
         @if (box(); as b) {
           <rect class="select-box" [attr.x]="b.x" [attr.y]="b.y" [attr.width]="b.w" [attr.height]="b.h" />
         }
@@ -111,6 +137,11 @@ export function componentTransform(c: { x: number; y: number; rotation: number }
     .label { font-family: Arial, Helvetica, sans-serif; font-weight: 600; paint-order: stroke; stroke: #fff; stroke-width: 0.6px; }
     .selection { fill: rgba(62, 207, 142, 0.12); stroke: #16a34a; stroke-width: 1.5; stroke-dasharray: 4 3; }
     .ghost { opacity: 0.55; }
+    .wire-sel { stroke: rgba(62, 207, 142, 0.45); stroke-width: 9; }
+    .wire-draft { opacity: 0.75; stroke-dasharray: 6 4; }
+    .handle { stroke: #16a34a; stroke-width: 1.5; }
+    .handle-vertex, .handle-end { fill: #fff; }
+    .handle-mid { fill: rgba(62, 207, 142, 0.35); }
     .select-box { fill: rgba(62, 207, 142, 0.08); stroke: #3ecf8e; stroke-width: 1; stroke-dasharray: 5 3; }
   `,
 })
@@ -118,6 +149,66 @@ export class DrawingLayer {
   private readonly viewport = inject(ViewportStore);
   private readonly tools = inject(ToolsStore);
   private readonly drawing = inject(DrawingStore);
+
+  /** Cable line width: 0.5 mm on paper. */
+  protected readonly wireWidth = 0.5 * MM_TO_PT;
+
+  protected readonly wireItems = computed(() => {
+    const lookup = this.drawing.lookup();
+    const sel = this.drawing.selection();
+    return this.drawing.visibleWires().map((w) => {
+      const route = wireRoute(w, lookup);
+      // label at the middle of the longest segment
+      let best = 0;
+      let at = route[0]!;
+      for (let i = 1; i < route.length; i++) {
+        const a = route[i - 1]!;
+        const b = route[i]!;
+        const len = Math.hypot(b.x - a.x, b.y - a.y);
+        if (len > best) {
+          best = len;
+          at = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 1.2 * MM_TO_PT };
+        }
+      }
+      return {
+        id: w.id,
+        points: route.map((p) => `${p.x},${p.y}`).join(' '),
+        color: w.cable.color,
+        dash: dashArray(w.cable.lineStyle),
+        selected: sel.has(w.id),
+        label: w.label,
+        labelAt: at,
+      };
+    });
+  });
+
+  /** The wire being drawn, from its start through the clicked bends to the cursor. */
+  private readonly draftRoute = computed(() => {
+    const d = this.tools.wireDraft();
+    if (!d || this.tools.tool() !== 'wire') return null;
+    const c = d.from.componentId ? this.drawing.byId().get(d.from.componentId) : undefined;
+    const start = c ? portPosition(c, d.from.portId) : { x: d.from.x, y: d.from.y };
+    const cursor = this.tools.cursor();
+    return [start, ...d.points, ...(cursor ? [cursor] : [])];
+  });
+  protected readonly draft = computed(() => {
+    const r = this.draftRoute();
+    return r ? { points: r.map((p) => `${p.x},${p.y}`).join(' '), color: this.tools.wireCable().color } : null;
+  });
+  protected readonly draftLabel = computed(() => {
+    const r = this.draftRoute();
+    const view = this.viewport.view();
+    if (!r || r.length < 2 || !view) return null;
+    return { text: formatMetres(measureMetres(r, this.calibrationData())), at: toScreenAt(view, r[r.length - 1]!) };
+  });
+
+  /** Edit handles of a single selected wire (screen space). */
+  protected readonly handles = computed(() => {
+    const wires = this.drawing.selectedWires();
+    const view = this.viewport.view();
+    if (wires.length !== 1 || this.drawing.selected().length || !view) return [];
+    return wireHandles(wires[0]!, this.drawing.lookup(), view);
+  });
 
   /** Label text height: 2.2 mm on paper. */
   protected readonly labelSize = 2.2 * MM_TO_PT;

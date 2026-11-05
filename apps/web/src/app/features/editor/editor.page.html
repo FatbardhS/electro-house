@@ -67,6 +67,10 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l14 8-6 1.5L10 19z" /></svg>
       <span>Select</span>
     </button>
+    <button class="tool" type="button" [class.active]="tools.tool() === 'wire'" (click)="setTool('wire')" [disabled]="!floor()?.planFile" title="Draw wire (W). Click components or points; double-click or Enter to end at a free point. Shift: free angle.">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h6V6h10" /><circle cx="4" cy="18" r="1.8" /><circle cx="20" cy="6" r="1.8" /></svg>
+      <span>Wire</span>
+    </button>
     <button class="tool" type="button" [class.active]="tools.tool() === 'pan'" (click)="setTool('pan')" title="Pan (H). Middle mouse or Space+drag pans with any tool.">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V12M11 11.5v-8a1.5 1.5 0 0 1 3 0V12M14 6.5a1.5 1.5 0 0 1 3 0V13M17 8.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-1.5a6 6 0 0 1-5-2.7L5 15a1.6 1.6 0 0 1 2.6-1.9L8 14"/></svg>
       <span>Pan</span>
@@ -123,7 +127,7 @@
           @if (uploadError(); as e) { <div class="banner banner-error">{{ e }}</div> }
         </app-empty-state>
       } @else {
-        <app-workspace class="workspace" [page]="page.hasValue() ? page.value() : null" [showGrid]="showGrid()"
+        <app-workspace #ws class="workspace" [page]="page.hasValue() ? page.value() : null" [showGrid]="showGrid()"
                        [calibration]="calibration()" [calibrationLocked]="calibrationLocked()" (renderError)="renderError.set($event)" />
         @if (page.error(); as err) {
           <div class="overlay-msg"><app-error-state [message]="'The plan page could not be opened: ' + message(err)" (retry)="page.reload()" /></div>
@@ -138,6 +142,10 @@
             <button class="btn btn-sm" type="button" (click)="setTool('calibrate')">Calibrate</button>
           </div>
         }
+        @if (tools.tool() === 'wire') {
+          <div class="hint-bar">{{ tools.wireDraft() ? 'Click to add bends, click a component to connect. Double-click / Enter ends at a free point. Esc cancels.' : 'Click a component or a point to start a wire.' }}
+            Shift: {{ tools.wireOrtho() ? 'any angle' : 'straight' }}.</div>
+        }
         @if (tools.tool() === 'place') {
           <div class="hint-bar">Click on the plan to place. <kbd>Esc</kbd> or right-click to stop.
             {{ tools.snap() ? 'Snapping to grid (hold Alt to place freely).' : '' }}</div>
@@ -149,9 +157,17 @@
 
   <aside class="panel" aria-label="Properties">
     @if (floor(); as f) {
-      @if (drawing.selected().length) {
+      @if (drawing.selectedWires().length === 1 && drawing.selected().length === 0) {
+        <section>
+          <h3>Wire</h3>
+          <app-wire-panel [calibration]="calibration()" />
+        </section>
+      } @else if (drawing.selectionCount()) {
         <section>
           <h3>Selection</h3>
+          @if (drawing.selectedWires().length) {
+            <div class="faint" style="font-size: 12px">Includes {{ drawing.selectedWires().length }} wire(s).</div>
+          }
           <app-properties-panel [floors]="project.hasValue() ? project.value().floors : []" [currentFloorId]="f.id"
                                 (copyToFloor)="copyToFloor($event)" />
         </section>
@@ -164,6 +180,7 @@
             <div class="kv"><span class="faint">Page</span><span>{{ f.planPage }} of {{ f.planFile.pageCount }}</span></div>
             <div class="kv"><span class="faint">Rotation</span><span>{{ f.planRotation }}°</span></div>
             <div class="kv"><span class="faint">Components</span><span>{{ drawing.components().length }}</span></div>
+            <div class="kv"><span class="faint">Wires</span><span>{{ drawing.wires().length }} · {{ totalWireLength() }}</span></div>
             @if (viewport.view(); as v) {
               <div class="kv"><span class="faint">Sheet</span><span class="mono">{{ (v.page.width / 72 * 25.4).toFixed(0) }} × {{ (v.page.height / 72 * 25.4).toFixed(0) }} mm</span></div>
             }
@@ -180,7 +197,7 @@
       }
       <section class="shortcuts">
         <h3>Shortcuts</h3>
-        <div><kbd>V</kbd> select · <kbd>H</kbd> pan · <kbd>M</kbd> measure · <kbd>C</kbd> scale</div>
+        <div><kbd>V</kbd> select · <kbd>W</kbd> wire · <kbd>H</kbd> pan · <kbd>M</kbd> measure · <kbd>C</kbd> scale</div>
         <div><kbd>R</kbd> rotate · <kbd>Del</kbd> delete · <kbd>Arrows</kbd> nudge</div>
         <div><kbd>Ctrl</kbd>+<kbd>Z</kbd>/<kbd>Y</kbd> undo/redo · <kbd>Ctrl</kbd>+<kbd>C</kbd>/<kbd>V</kbd>/<kbd>D</kbd></div>
         <div><kbd>Wheel</kbd> zoom · <kbd>Space</kbd>+drag pan · <kbd>F</kbd> fit · <kbd>S</kbd> snap</div>

@@ -14,16 +14,22 @@ import type { PDFPageProxy } from 'pdfjs-dist';
 import {
   createComponent,
   hitTest,
+  hitTestWire,
   insideRect,
   planToScreen,
+  portPosition,
   snapToStep,
   uuidv7,
+  wireRoute,
   type Calibration,
   type ComponentDto,
   type Vec2,
+  type WireDto,
+  type WireEndDto,
 } from '@electro/shared';
 import { DrawingLayer } from './drawing/drawing-layer';
 import { gridSpec } from './drawing/grid';
+import { elbow, handleAt, orthoPoint, wireHandles, type WireHandle } from './drawing/wire-handles';
 import { PdfLayer } from './pdf/pdf-layer';
 import { DrawingStore } from './state/drawing.store';
 import { ToolsStore, constrainOrthogonal } from './state/tools.store';
@@ -32,18 +38,20 @@ import { ViewportStore } from './viewport/viewport.store';
 const WHEEL_ZOOM_SPEED = 0.0015;
 /** Pointer must move this far (px) before a press becomes a drag. */
 const DRAG_THRESHOLD_PX = 4;
-/** Extra pick tolerance around symbols, in screen pixels. */
-const PICK_TOLERANCE_PX = 3;
+/** Extra pick tolerance around symbols and wires, in screen pixels. */
+const PICK_TOLERANCE_PX = 4;
 export const DRAG_MIME = 'application/x-electro-component';
 
+type MoveSnap = { components: ComponentDto[]; wires: WireDto[] };
 type Gesture =
   | { kind: 'pan'; last: Vec2 }
-  | { kind: 'move'; start: Vec2; startScreen: Vec2; before: ComponentDto[]; anchor: ComponentDto; dragging: boolean }
+  | { kind: 'move'; start: Vec2; startScreen: Vec2; snap: MoveSnap; anchor: Vec2; wireIds: ReadonlySet<string>; dragging: boolean }
+  | { kind: 'handle'; wire: WireDto; handle: WireHandle; startScreen: Vec2; dragging: boolean }
   | { kind: 'box'; start: Vec2; additive: boolean };
 
 /**
  * The interactive canvas area. Converts pointer input into plan coordinates and editor actions.
- * Owns no data: it updates the ViewportStore (view), ToolsStore (tool input) and DrawingStore (components).
+ * Owns no data: it updates the ViewportStore (view), ToolsStore (tool input) and DrawingStore (drawing).
  */
 @Component({
   selector: 'app-workspace',
@@ -81,6 +89,7 @@ type Gesture =
     :host(.cursor-cross) { cursor: crosshair; }
     :host(.cursor-default) { cursor: default; }
     :host(.cursor-move) { cursor: move; }
+    :host(.cursor-point) { cursor: pointer; }
   `,
 })
 export class Workspace {
@@ -98,14 +107,17 @@ export class Workspace {
 
   private readonly spaceHeld = signal(false);
   private readonly gesture = signal<Gesture | null>(null);
-  private readonly hovering = signal(false);
+  private readonly hover = signal<'none' | 'object' | 'handle'>('none');
 
   protected readonly cursorClass = computed(() => {
     const g = this.gesture();
     if (g?.kind === 'pan') return 'cursor-panning';
-    if (g?.kind === 'move' && g.dragging) return 'cursor-move';
+    if ((g?.kind === 'move' || g?.kind === 'handle') && g.dragging) return 'cursor-move';
     if (this.spaceHeld() || this.tools.tool() === 'pan') return 'cursor-pan';
-    if (this.tools.tool() === 'select') return this.hovering() ? 'cursor-move' : 'cursor-default';
+    if (this.tools.tool() === 'select') {
+      const h = this.hover();
+      return h === 'handle' ? 'cursor-point' : h === 'object' ? 'cursor-move' : 'cursor-default';
+    }
     return 'cursor-cross';
   });
 
@@ -166,6 +178,7 @@ export class Workspace {
       if (tool === 'measure') this.tools.measurePoints().length >= 2 ? this.tools.finishMeasure() : this.tools.clearMeasure();
       if (tool === 'calibrate') this.tools.resetCalibration();
       if (tool === 'place') this.tools.setTool('select');
+      if (tool === 'wire') this.finishWire();
       return;
     }
     if (e.button !== 0) return;
@@ -173,31 +186,8 @@ export class Workspace {
     const raw = this.viewport.toPlan(local);
     if (!raw) return;
 
-    if (tool === 'select') {
-      const hit = hitTest(this.drawing.selectable(), raw, PICK_TOLERANCE_PX / this.zoom());
-      if (hit) {
-        const sel = this.drawing.selection();
-        if (e.shiftKey || e.ctrlKey || e.metaKey) {
-          this.drawing.select([hit.id], 'toggle');
-          return;
-        }
-        if (!sel.has(hit.id)) this.drawing.select([hit.id]);
-        this.capture(e);
-        this.gesture.set({
-          kind: 'move',
-          start: raw,
-          startScreen: local,
-          before: this.drawing.selected(),
-          anchor: hit,
-          dragging: false,
-        });
-      } else {
-        this.capture(e);
-        this.gesture.set({ kind: 'box', start: local, additive: e.shiftKey || e.ctrlKey || e.metaKey });
-      }
-      return;
-    }
-
+    if (tool === 'select') return this.selectDown(e, local, raw);
+    if (tool === 'wire') return this.wireClick(raw, e.shiftKey, e.altKey);
     if (tool === 'place') {
       const type = this.tools.placeType();
       if (type) this.placeAt(type, this.snapped(raw, e.altKey));
@@ -210,6 +200,48 @@ export class Workspace {
     if (tool === 'calibrate' && !this.calibrationLocked()) this.tools.addCalibrationPoint(p);
   }
 
+  private selectDown(e: PointerEvent, local: Vec2, raw: Vec2): void {
+    const additive = e.shiftKey || e.ctrlKey || e.metaKey;
+    const tol = PICK_TOLERANCE_PX / this.zoom();
+
+    // 1. Handles of a single selected wire (bend points, segment midpoints, ends).
+    const handle = this.handleUnder(local);
+    if (handle && !additive) {
+      this.capture(e);
+      this.gesture.set({ kind: 'handle', wire: handle.wire, handle: handle.handle, startScreen: local, dragging: false });
+      return;
+    }
+
+    // 2. Components, then wires.
+    const comp = hitTest(this.drawing.selectable(), raw, tol);
+    const wire = comp ? null : hitTestWire(this.drawing.selectableWires(), raw, tol, this.drawing.lookup());
+    const hitId = comp?.id ?? wire?.id;
+    if (hitId) {
+      if (additive) {
+        this.drawing.select([hitId], 'toggle');
+        return;
+      }
+      if (!this.drawing.selection().has(hitId)) this.drawing.select([hitId]);
+      const compIds = new Set(this.drawing.selected().map((c) => c.id));
+      const wireIds = new Set(this.drawing.selectedWires().map((w) => w.id));
+      this.capture(e);
+      this.gesture.set({
+        kind: 'move',
+        start: raw,
+        startScreen: local,
+        snap: this.drawing.moveSnapshot(compIds, wireIds),
+        anchor: comp ? { x: comp.x, y: comp.y } : raw,
+        wireIds,
+        dragging: false,
+      });
+      return;
+    }
+
+    // 3. Empty space: box selection (or clear on a plain click).
+    this.capture(e);
+    this.gesture.set({ kind: 'box', start: local, additive });
+  }
+
   protected onPointerMove(e: PointerEvent): void {
     const local = this.local(e);
     const g = this.gesture();
@@ -219,18 +251,22 @@ export class Workspace {
       return;
     }
     if (g?.kind === 'move') {
-      if (!g.dragging && Math.hypot(local.x - g.startScreen.x, local.y - g.startScreen.y) < DRAG_THRESHOLD_PX) return;
+      if (!g.dragging && dist(local, g.startScreen) < DRAG_THRESHOLD_PX) return;
       const p = this.viewport.toPlan(local);
       if (!p) return;
-      // Snap the grabbed component; move the rest of the selection by the same offset.
+      // Snap the grabbed object; move the rest of the selection by the same offset.
       let target = { x: g.anchor.x + (p.x - g.start.x), y: g.anchor.y + (p.y - g.start.y) };
-      if (e.shiftKey) {
-        target = constrainOrthogonal(g.anchor, target, (v) => this.viewport.toScreen(v)!, (v) => this.viewport.toPlan(v)!);
-      }
+      if (e.shiftKey) target = constrainOrthogonal(g.anchor, target, this.toScreenFn, this.toPlanFn);
       target = this.snapped(target, e.altKey);
-      const dx = target.x - g.anchor.x;
-      const dy = target.y - g.anchor.y;
-      this.drawing.preview(g.before.map((c) => ({ ...c, x: c.x + dx, y: c.y + dy })));
+      this.drawing.preview(this.drawing.movedBy(g.snap, target.x - g.anchor.x, target.y - g.anchor.y, g.wireIds));
+      if (!g.dragging) this.gesture.set({ ...g, dragging: true });
+      return;
+    }
+    if (g?.kind === 'handle') {
+      if (!g.dragging && dist(local, g.startScreen) < DRAG_THRESHOLD_PX) return;
+      const p = this.viewport.toPlan(local);
+      if (!p) return;
+      this.drawing.preview({ wires: [this.editedWire(g.wire, g.handle, this.snapped(p, e.altKey), false)] });
       if (!g.dragging) this.gesture.set({ ...g, dragging: true });
       return;
     }
@@ -240,13 +276,16 @@ export class Workspace {
     }
 
     const tool = this.tools.tool();
+    const raw = this.viewport.toPlan(local);
     if (tool === 'select') {
-      const raw = this.viewport.toPlan(local);
-      this.hovering.set(!!raw && !!hitTest(this.drawing.selectable(), raw, PICK_TOLERANCE_PX / this.zoom()));
+      const tol = PICK_TOLERANCE_PX / this.zoom();
+      const over = !!raw && (!!hitTest(this.drawing.selectable(), raw, tol) || !!hitTestWire(this.drawing.selectableWires(), raw, tol, this.drawing.lookup()));
+      this.hover.set(this.handleUnder(local) ? 'handle' : over ? 'object' : 'none');
       this.tools.cursor.set(raw);
     } else if (tool === 'place') {
-      const raw = this.viewport.toPlan(local);
       this.tools.cursor.set(raw ? this.snapped(raw, e.altKey) : null);
+    } else if (tool === 'wire') {
+      this.tools.cursor.set(raw ? this.wirePoint(raw, e.shiftKey, e.altKey).point : null);
     } else {
       this.tools.cursor.set(this.toolPoint(local, e.shiftKey));
     }
@@ -259,11 +298,19 @@ export class Workspace {
     if (this.host.hasPointerCapture(e.pointerId)) this.host.releasePointerCapture(e.pointerId);
 
     if (g.kind === 'move' && g.dragging) {
-      this.drawing.commitPreview(g.before.length === 1 ? 'Move component' : `Move ${g.before.length} components`, g.before);
+      const n = g.snap.components.length + g.wireIds.size;
+      this.drawing.commitPreview(n === 1 ? (g.snap.components.length ? 'Move component' : 'Move wire') : `Move ${n} objects`, g.snap);
+    } else if (g.kind === 'handle' && g.dragging) {
+      const p = this.viewport.toPlan(this.local(e));
+      this.drawing.preview({ wires: [g.wire] }); // restore, then record one clean step
+      if (p) {
+        const label = g.handle.kind === 'end' ? 'Reconnect wire' : g.handle.kind === 'mid' ? 'Add bend' : 'Move bend';
+        this.drawing.updateWires([this.editedWire(g.wire, g.handle, this.snapped(p, e.altKey), true)], label);
+      }
     } else if (g.kind === 'box') {
       const box = this.tools.selectBox();
       this.tools.selectBox.set(null);
-      if (!box || Math.hypot(box.b.x - box.a.x, box.b.y - box.a.y) < DRAG_THRESHOLD_PX) {
+      if (!box || dist(box.a, box.b) < DRAG_THRESHOLD_PX) {
         if (!g.additive) this.drawing.clearSelection(); // plain click on empty space
         return;
       }
@@ -272,15 +319,138 @@ export class Workspace {
       if (!view) return;
       const onScreen = this.drawing.selectable().map((c) => ({ ...c, ...planToScreen(view, c) }));
       const ids = insideRect(onScreen, box.a, box.b).map((c) => c.id);
+      const x0 = Math.min(box.a.x, box.b.x);
+      const x1 = Math.max(box.a.x, box.b.x);
+      const y0 = Math.min(box.a.y, box.b.y);
+      const y1 = Math.max(box.a.y, box.b.y);
+      const lookup = this.drawing.lookup();
+      for (const w of this.drawing.selectableWires()) {
+        const inside = wireRoute(w, lookup)
+          .map((p) => planToScreen(view, p))
+          .every((p) => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1);
+        if (inside) ids.push(w.id);
+      }
       this.drawing.select(ids, g.additive ? 'add' : 'replace');
     }
   }
 
   protected onDoubleClick(e: MouseEvent): void {
-    if (this.tools.tool() === 'measure') {
+    const tool = this.tools.tool();
+    if (tool === 'measure') {
       e.preventDefault();
       this.tools.finishMeasure();
+    } else if (tool === 'wire') {
+      e.preventDefault();
+      this.finishWire();
+    } else if (tool === 'select') {
+      // Double-click a bend point to remove it.
+      const h = this.handleUnder(this.local(e));
+      if (h?.handle.kind === 'vertex') {
+        const w = h.wire;
+        this.drawing.updateWires([{ ...w, points: w.points.filter((_, i) => i !== (h.handle as { index: number }).index) }], 'Remove bend');
+      }
     }
+  }
+
+  // ── wire tool ──
+
+  /** Where a wire click lands: on a component port (connects) or a snapped, optionally orthogonal point. */
+  private wirePoint(raw: Vec2, shift: boolean, alt: boolean): { point: Vec2; component: ComponentDto | null } {
+    const comp = hitTest(this.drawing.selectable(), raw, PICK_TOLERANCE_PX / this.zoom());
+    if (comp) return { point: portPosition(comp, 'p'), component: comp };
+    let p = this.snapped(raw, alt);
+    const draft = this.tools.wireDraft();
+    const ortho = this.tools.wireOrtho() !== shift; // Shift inverts the orthogonal mode while held
+    if (draft && ortho) {
+      const last = draft.points.at(-1) ?? this.endPoint(draft.from);
+      p = orthoPoint(last, p, this.toScreenFn, this.toPlanFn);
+    }
+    return { point: p, component: null };
+  }
+
+  private wireClick(raw: Vec2, shift: boolean, alt: boolean): void {
+    const { point, component } = this.wirePoint(raw, shift, alt);
+    const draft = this.tools.wireDraft();
+    const end: WireEndDto = component
+      ? { componentId: component.id, portId: 'p', x: point.x, y: point.y }
+      : { componentId: null, portId: null, x: point.x, y: point.y };
+    if (!draft) {
+      this.tools.wireDraft.set({ from: end, points: [] });
+      return;
+    }
+    if (component) {
+      if (component.id === draft.from.componentId && draft.points.length === 0) return; // same start component
+      const last = draft.points.at(-1) ?? this.endPoint(draft.from);
+      const points = [...draft.points];
+      if (this.tools.wireOrtho() !== shift) {
+        const corner = elbow(last, point, this.toScreenFn, this.toPlanFn);
+        if (corner) points.push(corner);
+      }
+      this.commitWire(draft.from, end, points);
+      return;
+    }
+    const last = draft.points.at(-1) ?? this.endPoint(draft.from);
+    if (dist(last, point) < 1e-6) return; // ignore a repeated click on the same spot
+    this.tools.wireDraft.set({ ...draft, points: [...draft.points, point] });
+  }
+
+  /** Finishes the wire at its last bend point as a free end (double-click, Enter or right-click). */
+  finishWire(): void {
+    const draft = this.tools.wireDraft();
+    if (!draft) return;
+    if (draft.points.length === 0) {
+      this.tools.wireDraft.set(null);
+      return;
+    }
+    const points = [...draft.points];
+    const last = points.pop()!;
+    this.commitWire(draft.from, { componentId: null, portId: null, x: last.x, y: last.y }, points);
+  }
+
+  private commitWire(from: WireEndDto, to: WireEndDto, points: Vec2[]): void {
+    const w: WireDto = {
+      id: uuidv7(),
+      label: null,
+      from,
+      to,
+      points,
+      cable: { ...this.tools.wireCable() },
+      circuitId: null,
+      description: null,
+    };
+    this.drawing.addWire(w);
+    this.tools.wireDraft.set(null);
+  }
+
+  private endPoint(end: WireEndDto): Vec2 {
+    const c = end.componentId ? this.drawing.byId().get(end.componentId) : undefined;
+    return c ? portPosition(c, end.portId) : { x: end.x, y: end.y };
+  }
+
+  // ── wire editing ──
+
+  private handleUnder(local: Vec2): { wire: WireDto; handle: WireHandle } | null {
+    const wires = this.drawing.selectedWires();
+    const view = this.viewport.view();
+    if (wires.length !== 1 || this.drawing.selected().length || !view) return null;
+    const wire = wires[0]!;
+    const handle = handleAt(wireHandles(wire, this.drawing.lookup(), view), local);
+    return handle ? { wire, handle } : null;
+  }
+
+  /** The wire after dragging one of its handles to p. Ends dropped on a component connect to it. */
+  private editedWire(w: WireDto, h: WireHandle, p: Vec2, final: boolean): WireDto {
+    if (h.kind === 'vertex') return { ...w, points: w.points.map((q, i) => (i === h.index ? p : q)) };
+    if (h.kind === 'mid') {
+      const points = [...w.points];
+      points.splice(h.index, 0, p);
+      return { ...w, points };
+    }
+    const comp = final ? hitTest(this.drawing.selectable(), p, PICK_TOLERANCE_PX / this.zoom()) : null;
+    const end: WireEndDto = comp
+      ? { componentId: comp.id, portId: 'p', ...portPosition(comp, 'p') }
+      : { componentId: null, portId: null, x: p.x, y: p.y };
+    return h.which === 'from' ? { ...w, from: end } : { ...w, to: end };
   }
 
   // ── drag & drop from the library ──
@@ -307,6 +477,9 @@ export class Workspace {
   }
 
   // ── helpers ──
+
+  private readonly toScreenFn = (v: Vec2) => this.viewport.toScreen(v)!;
+  private readonly toPlanFn = (v: Vec2) => this.viewport.toPlan(v)!;
 
   private onWheel(e: WheelEvent): void {
     e.preventDefault();
@@ -352,8 +525,12 @@ export class Workspace {
           : [];
     const anchor = anchorList[anchorList.length - 1];
     if (!anchor || (tool === 'calibrate' && anchorList.length >= 2)) return p;
-    return constrainOrthogonal(anchor, p, (v) => this.viewport.toScreen(v)!, (v) => this.viewport.toPlan(v)!);
+    return constrainOrthogonal(anchor, p, this.toScreenFn, this.toPlanFn);
   }
+}
+
+function dist(a: Vec2, b: Vec2): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
 function isTyping(e: KeyboardEvent): boolean {

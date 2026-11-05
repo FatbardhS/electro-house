@@ -74,7 +74,7 @@ import { DrawingStore } from '../state/drawing.store';
         <input class="input mono" type="number" min="0" max="20000" step="50" placeholder="unchanged" (change)="commitHeight($event)" /></label>
     }
 
-    @if (drawing.selected().length) {
+    @if (drawing.selectionCount()) {
       <div class="actions">
         <button class="btn btn-sm" type="button" (click)="drawing.rotateSelected(-90)" title="Rotate −90° (Shift+R)">⟲ 90°</button>
         <button class="btn btn-sm" type="button" (click)="drawing.rotateSelected(90)" title="Rotate 90° (R)">⟳ 90°</button>
