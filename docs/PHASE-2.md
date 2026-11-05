@@ -1,6 +1,6 @@
-# Phase 2: Electrical editor (design proposal)
+# Phase 2: Electrical editor
 
-Status: **proposal, waiting for approval.** Builds on Phase 1 (see ARCHITECTURE.md).
+Status: **implemented** (2026-11-06). Builds on Phase 1 (see ARCHITECTURE.md). Implementation notes at the end.
 
 Goal: an electrician can pick real electrical symbols from a library, place them on a floor plan,
 select / move / rotate / copy / delete them, edit their properties, organise them in layers,
@@ -136,3 +136,16 @@ Layers are created for a floor on first use. Deleting a floor deletes its compon
 4. Library panel, placement, selection, move/rotate/delete/copy.
 5. Properties panel, layers panel, snapping, copy to floor.
 6. Browser check on the sample house plans, performance check, report.
+
+## 9. Implementation notes
+
+- 58 component types in 8 categories (`packages/shared/src/catalog/catalog.ts`), symbols as data primitives in paper mm.
+- Each type has one connection port at its insertion point (`p`), used by the Phase 3 wiring engine.
+- `Floor.drawingRevision` is separate from `Floor.revision` so the settings autosave and the drawing autosave never conflict.
+- Performance with thousands of components was not measured yet (planned check from §7 still open).
+- Layer rows are stored only when a layer differs from the default (visible, unlocked).
+- Hit-testing is geometric (distance to the insertion point within the symbol's hit radius), not DOM-based,
+  so it is independent of zoom, rotation and SVG pointer events.
+- Copies (paste, duplicate, copy to floor) get the next free automatic label; labels typed by the user are kept.
+- Copy to another floor is saved directly to that floor and is not part of this floor's undo history.
+- Plan rotation moved to the toolbar buttons; **R** now rotates the selected components.

@@ -3,7 +3,7 @@
 Electrical installation planner for professional electricians: upload architectural floor plans (PDF),
 organise them by client → project → floor, and plan the installation on top of them.
 
-**Status:** Phase 1 (foundation) complete. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design and roadmap.
+**Status:** Phase 1 (foundation) and Phase 2 (electrical editor) complete. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design and roadmap.
 
 ## Stack
 
@@ -27,8 +27,8 @@ cp apps/api/.env.example apps/api/.env
 **Database and file storage**, pick one:
 
 - **With Docker:** `npm run db:up` (PostgreSQL + MinIO). Keep "Option A" in `apps/api/.env`.
-- **Without Docker:** in `apps/api` run `npx prisma dev --name electro-house --detach`, then
-  `npm run db:create-local -w @electro/api`, and switch `apps/api/.env` to "Option B".
+- **Without Docker:** in `apps/api` run `npx prisma dev --name electro-house --detach` and switch
+  `apps/api/.env` to "Option B" (it needs both `DATABASE_URL` and `SHADOW_DATABASE_URL`).
 
 Then create the tables and start both apps (two terminals):
 

@@ -126,10 +126,14 @@ model Floor {
   backgroundLocked      Boolean     @default(false)
   /// Incremented on every saved change; used for optimistic concurrency (409 on mismatch).
   revision              Int         @default(0)
+  /// Revision of the drawing (components, layers); separate from settings so the two autosaves never conflict.
+  drawingRevision       Int         @default(0)
   createdAt             DateTime    @default(now())
   updatedAt             DateTime    @updatedAt
   project               Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   planFile              StoredFile? @relation(fields: [planFileId], references: [id], onDelete: SetNull)
+  layers                Layer[]
+  components            Component[]
 
   @@index([projectId, sortOrder])
 }
@@ -150,5 +154,38 @@ model StoredFile {
   @@index([organizationId])
 }
 
-// Layer, Component and Wire tables (docs/ARCHITECTURE.md §4) are added in Phase 2–3 migrations,
-// when the code that uses them exists.
+// ── Drawing ───────────────────────────────────────────────────
+
+/// Per-floor layer state. Rows exist only for layers whose state differs from the default (visible, unlocked).
+model Layer {
+  id        String  @id @default(uuid()) @db.Uuid
+  floorId   String  @db.Uuid
+  key       String
+  visible   Boolean @default(true)
+  locked    Boolean @default(false)
+  floor     Floor   @relation(fields: [floorId], references: [id], onDelete: Cascade)
+
+  @@unique([floorId, key])
+}
+
+/// A placed electrical component. Position is in plan coordinates (PDF points of the plan page).
+model Component {
+  id            String   @id @db.Uuid
+  floorId       String   @db.Uuid
+  typeKey       String
+  typeVersion   Int
+  layerKey      String
+  label         String?
+  x             Float
+  y             Float
+  rotation      Float    @default(0)
+  mountHeightMm Int?
+  description   String?
+  /// Validated against the component type's schema in @electro/shared.
+  properties    Json     @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  floor         Floor    @relation(fields: [floorId], references: [id], onDelete: Cascade)
+
+  @@index([floorId])
+}

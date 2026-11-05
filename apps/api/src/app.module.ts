@@ -14,6 +14,8 @@ import { ProjectsService } from './projects/projects.service.js';
 import { FloorsController } from './floors/floors.controller.js';
 import { FloorsService } from './floors/floors.service.js';
 import { PlanFilesService } from './files/plan-files.service.js';
+import { DrawingController } from './drawing/drawing.controller.js';
+import { DrawingService } from './drawing/drawing.service.js';
 
 @Module({
   imports: [
@@ -25,13 +27,14 @@ import { PlanFilesService } from './files/plan-files.service.js';
       skipIf: () => process.env['NODE_ENV'] === 'test',
     }),
   ],
-  controllers: [AuthController, ClientsController, ProjectsController, FloorsController],
+  controllers: [AuthController, ClientsController, ProjectsController, FloorsController, DrawingController],
   providers: [
     AuthService,
     ClientsService,
     ProjectsService,
     FloorsService,
     PlanFilesService,
+    DrawingService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: SessionGuard },
     { provide: APP_FILTER, useClass: ApiExceptionFilter },

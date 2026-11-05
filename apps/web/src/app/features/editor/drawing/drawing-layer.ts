@@ -8,9 +8,17 @@ import {
   type Calibration,
   type Vec2,
 } from '@electro/shared';
+import { MM_TO_PT, componentType, hitRadius } from '@electro/shared';
 import { ViewportStore } from '../viewport/viewport.store';
 import { ToolsStore } from '../state/tools.store';
+import { DrawingStore } from '../state/drawing.store';
 import { gridSpec, visibleGridLines } from './grid';
+import { LAYER_COLORS, symbolId } from './symbol-defs';
+
+/** SVG transform placing a symbol (drawn in paper mm) at a component's plan position and rotation. */
+export function componentTransform(c: { x: number; y: number; rotation: number }): string {
+  return `translate(${c.x} ${c.y}) rotate(${c.rotation}) scale(${MM_TO_PT})`;
+}
 
 /**
  * SVG overlay above the PDF. Plan-space content sits inside one <g> with the view matrix,
@@ -38,7 +46,28 @@ import { gridSpec, visibleGridLines } from './grid';
           }
           <rect class="page-outline" x="0" y="0" [attr.width]="page()!.width" [attr.height]="page()!.height"
                 vector-effect="non-scaling-stroke" />
+
+          <!-- Electrical components, by layer, in draw order -->
+          <g class="components">
+            @for (c of items(); track c.id) {
+              <g [attr.transform]="c.transform" [style.color]="c.color">
+                <use [attr.href]="c.href" />
+              </g>
+              @if (c.label) {
+                <text class="label" [attr.x]="c.labelX" [attr.y]="c.labelY" [attr.font-size]="labelSize" [style.fill]="c.color">{{ c.label }}</text>
+              }
+            }
+          </g>
+          @for (s of selectionRings(); track s.id) {
+            <circle class="selection" [attr.cx]="s.x" [attr.cy]="s.y" [attr.r]="s.r" vector-effect="non-scaling-stroke" />
+          }
+          @if (ghost(); as g) {
+            <g class="ghost" [attr.transform]="g.transform" [style.color]="g.color"><use [attr.href]="g.href" /></g>
+          }
         </g>
+        @if (box(); as b) {
+          <rect class="select-box" [attr.x]="b.x" [attr.y]="b.y" [attr.width]="b.w" [attr.height]="b.h" />
+        }
 
         <!-- Screen-space tool feedback -->
         @if (measure(); as m) {
@@ -79,11 +108,60 @@ import { gridSpec, visibleGridLines } from './grid';
     .calibration polyline { fill: none; stroke: #3ecf8e; stroke-width: 2; stroke-dasharray: 6 4; }
     .calibration circle { fill: rgba(62, 207, 142, 0.2); stroke: #3ecf8e; stroke-width: 1.5; }
     .calibration line { stroke: #3ecf8e; stroke-width: 1; }
+    .label { font-family: Arial, Helvetica, sans-serif; font-weight: 600; paint-order: stroke; stroke: #fff; stroke-width: 0.6px; }
+    .selection { fill: rgba(62, 207, 142, 0.12); stroke: #16a34a; stroke-width: 1.5; stroke-dasharray: 4 3; }
+    .ghost { opacity: 0.55; }
+    .select-box { fill: rgba(62, 207, 142, 0.08); stroke: #3ecf8e; stroke-width: 1; stroke-dasharray: 5 3; }
   `,
 })
 export class DrawingLayer {
   private readonly viewport = inject(ViewportStore);
   private readonly tools = inject(ToolsStore);
+  private readonly drawing = inject(DrawingStore);
+
+  /** Label text height: 2.2 mm on paper. */
+  protected readonly labelSize = 2.2 * MM_TO_PT;
+
+  /** Render data for every visible component (transform strings computed once per change). */
+  protected readonly items = computed(() =>
+    this.drawing.visible().map((c) => {
+      const type = componentType(c.typeKey);
+      const r = (type?.symbol.hitRadiusMm ?? 3) * MM_TO_PT;
+      const note = c.typeKey === 'annotation.note' ? String(c.properties['text'] ?? '') : '';
+      return {
+        id: c.id,
+        transform: componentTransform(c),
+        href: `#${symbolId(c.typeKey)}`,
+        color: LAYER_COLORS[c.layerKey],
+        label: note || c.label,
+        labelX: c.x + r * 0.9,
+        labelY: c.y - r * 0.9,
+      };
+    }),
+  );
+
+  protected readonly selectionRings = computed(() =>
+    this.drawing.selected().map((c) => ({ id: c.id, x: c.x, y: c.y, r: hitRadius(c) * 1.15 })),
+  );
+
+  /** Semi-transparent preview of the component about to be placed. */
+  protected readonly ghost = computed(() => {
+    const key = this.tools.placeType();
+    const at = this.tools.cursor();
+    const type = key ? componentType(key) : undefined;
+    if (this.tools.tool() !== 'place' || !type || !at) return null;
+    return {
+      transform: componentTransform({ x: at.x, y: at.y, rotation: 0 }),
+      href: `#${symbolId(type.key)}`,
+      color: LAYER_COLORS[type.defaultLayer],
+    };
+  });
+
+  protected readonly box = computed(() => {
+    const b = this.tools.selectBox();
+    if (!b) return null;
+    return { x: Math.min(b.a.x, b.b.x), y: Math.min(b.a.y, b.b.y), w: Math.abs(b.b.x - b.a.x), h: Math.abs(b.b.y - b.a.y) };
+  });
 
   readonly showGrid = input(true);
   readonly calibrationData = input<Calibration | null>(null);

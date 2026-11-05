@@ -7,6 +7,7 @@ import request from 'supertest';
 import type { App } from 'supertest/types.js';
 import type { ClientDto, FloorDto, ProjectDto } from '@electro/shared';
 import { makePdf } from './pdf-fixture.js';
+import * as shared from '@electro/shared';
 
 // Runs against the database configured in apps/api/.env. Each run uses fresh, unique accounts.
 if (existsSync('.env')) process.loadEnvFile('.env');
@@ -215,5 +216,91 @@ describe('plan upload and floor settings', () => {
 
     await agent.patch(`/api/floors/${floor.id}/settings`).send({ baseRevision: 2, planPage: 3 }).expect(400);
     await agent.patch(`/api/floors/${floor.id}/settings`).send({ baseRevision: 2, planRotation: 45 }).expect(400);
+  });
+});
+
+describe('drawing (components and layers)', () => {
+  async function setup(company: string) {
+    const { agent } = await signUp(company);
+    const client = (await agent.post('/api/clients').send({ name: 'C' })).body;
+    const project = (await agent.post('/api/projects').send({ clientId: client.id, name: 'P' })).body;
+    const floor = (await agent.post(`/api/projects/${project.id}/floors`).send({ name: 'Ground floor' })).body as FloorDto;
+    return { agent, floor, project };
+  }
+  const { createComponent, uuidv7 } = shared;
+
+  it('starts empty with default layers', async () => {
+    const { agent, floor } = await setup('Drawing Empty Co');
+    const d = (await agent.get(`/api/floors/${floor.id}/drawing`).expect(200)).body;
+    expect(d).toMatchObject({ floorId: floor.id, revision: 0, components: [] });
+    expect(d.layers).toHaveLength(8);
+    expect(d.layers.every((l: { visible: boolean; locked: boolean }) => l.visible && !l.locked)).toBe(true);
+  });
+
+  it('saves, updates and deletes components exactly, with layer state', async () => {
+    const { agent, floor } = await setup('Drawing Save Co');
+    const a = createComponent('outlet.double', { x: 120.5, y: 340.25 }, uuidv7(), []);
+    const b = { ...createComponent('switch.two-way', { x: 10, y: 20 }, uuidv7(), []), rotation: 450 };
+    const r1 = await agent
+      .patch(`/api/floors/${floor.id}/drawing`)
+      .send({ baseRevision: 0, ops: [{ op: 'upsert', component: a }, { op: 'upsert', component: b }, { op: 'layer', key: 'outlets', locked: true }] })
+      .expect(200);
+    expect(r1.body.revision).toBe(1);
+
+    let d = (await agent.get(`/api/floors/${floor.id}/drawing`)).body;
+    expect(d.components).toHaveLength(2);
+    expect(d.components.find((c: { id: string }) => c.id === a.id)).toEqual(a);
+    expect(d.components.find((c: { id: string }) => c.id === b.id).rotation).toBe(90); // normalised
+    expect(d.layers.find((l: { key: string }) => l.key === 'outlets')).toEqual({ key: 'outlets', visible: true, locked: true });
+
+    await agent
+      .patch(`/api/floors/${floor.id}/drawing`)
+      .send({ baseRevision: 1, ops: [{ op: 'upsert', component: { ...a, x: 200, label: 'P99' } }, { op: 'delete', id: b.id }] })
+      .expect(200);
+    d = (await agent.get(`/api/floors/${floor.id}/drawing`)).body;
+    expect(d.revision).toBe(2);
+    expect(d.components).toEqual([{ ...a, x: 200, label: 'P99' }]);
+  });
+
+  it('rejects stale revisions, unknown types and invalid properties without changing anything', async () => {
+    const { agent, floor } = await setup('Drawing Reject Co');
+    const a = createComponent('light.ceiling', { x: 1, y: 1 }, uuidv7(), []);
+    await agent.patch(`/api/floors/${floor.id}/drawing`).send({ baseRevision: 0, ops: [{ op: 'upsert', component: a }] }).expect(200);
+    await agent.patch(`/api/floors/${floor.id}/drawing`).send({ baseRevision: 0, ops: [{ op: 'delete', id: a.id }] }).expect(409);
+    const bad1 = await agent
+      .patch(`/api/floors/${floor.id}/drawing`)
+      .send({ baseRevision: 1, ops: [{ op: 'upsert', component: { ...a, typeKey: 'light.laser' } }] })
+      .expect(400);
+    expect(bad1.body.message).toContain('Unknown component type');
+    const bad2 = await agent
+      .patch(`/api/floors/${floor.id}/drawing`)
+      .send({ baseRevision: 1, ops: [{ op: 'upsert', component: { ...a, properties: { powerW: -3 } } }] })
+      .expect(400);
+    expect(bad2.body.message).toMatch(/Power must be at least 0/);
+    const d = (await agent.get(`/api/floors/${floor.id}/drawing`)).body;
+    expect(d).toMatchObject({ revision: 1, components: [a] });
+  });
+
+  it('keeps drawings private to the company and to the floor', async () => {
+    const one = await setup('Drawing Owner Co');
+    const other = await setup('Drawing Other Co');
+    const a = createComponent('switch.single', { x: 5, y: 5 }, uuidv7(), []);
+    await one.agent.patch(`/api/floors/${one.floor.id}/drawing`).send({ baseRevision: 0, ops: [{ op: 'upsert', component: a }] }).expect(200);
+    await other.agent.get(`/api/floors/${one.floor.id}/drawing`).expect(404);
+    await other.agent.patch(`/api/floors/${one.floor.id}/drawing`).send({ baseRevision: 1, ops: [{ op: 'delete', id: a.id }] }).expect(404);
+    // Re-using another floor's component id on your own floor must not move/overwrite it.
+    await other.agent
+      .patch(`/api/floors/${other.floor.id}/drawing`)
+      .send({ baseRevision: 0, ops: [{ op: 'upsert', component: { ...a, x: 999 } }] })
+      .expect(400);
+    const d = (await one.agent.get(`/api/floors/${one.floor.id}/drawing`)).body;
+    expect(d.components[0].x).toBe(5);
+  });
+
+  it('settings and drawing autosaves do not conflict with each other', async () => {
+    const { agent, floor } = await setup('Drawing Rev Co');
+    await agent.patch(`/api/floors/${floor.id}/settings`).send({ baseRevision: 0, planRotation: 90 }).expect(200);
+    const a = createComponent('switch.single', { x: 5, y: 5 }, uuidv7(), []);
+    await agent.patch(`/api/floors/${floor.id}/drawing`).send({ baseRevision: 0, ops: [{ op: 'upsert', component: a }] }).expect(200);
   });
 });

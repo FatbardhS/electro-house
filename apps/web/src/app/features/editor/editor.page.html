@@ -1,3 +1,4 @@
+<app-symbol-defs />
 <header class="toolbar">
   <a class="btn btn-sm btn-ghost" [routerLink]="['/projects', projectId()]" title="Back to project">←</a>
   <div class="title">
@@ -8,7 +9,7 @@
   </div>
 
   @if (project.hasValue()) {
-    <select class="input floor-select" aria-label="Floor" [value]="floorId()" (change)="switchFloor($any($event.target).value)">
+    <select class="input floor-select" aria-label="Floor" (change)="switchFloor($any($event.target).value)">
       @for (f of project.value().floors; track f.id) {
         <option [value]="f.id" [selected]="f.id === floorId()">{{ f.name }}{{ f.planFile ? '' : ' (no plan)' }}</option>
       }
@@ -17,6 +18,13 @@
 
   <div class="sep"></div>
 
+  <div class="group" role="group" aria-label="History">
+    <button class="btn btn-sm btn-icon" type="button" (click)="undo()" [disabled]="!drawing.canUndo()"
+            [title]="drawing.undoLabel() ? 'Undo ' + drawing.undoLabel() + ' (Ctrl+Z)' : 'Nothing to undo'">↶</button>
+    <button class="btn btn-sm btn-icon" type="button" (click)="redo()" [disabled]="!drawing.canRedo()"
+            [title]="drawing.redoLabel() ? 'Redo ' + drawing.redoLabel() + ' (Ctrl+Shift+Z)' : 'Nothing to redo'">↷</button>
+  </div>
+
   <div class="group" role="group" aria-label="Zoom">
     <button class="btn btn-sm btn-icon" type="button" (click)="viewport.zoomBy(0.8)" title="Zoom out (−)" [disabled]="!viewport.view()">−</button>
     <span class="zoom mono">{{ viewport.zoomPercent() }}%</span>
@@ -24,15 +32,15 @@
     <button class="btn btn-sm" type="button" (click)="viewport.fit()" title="Fit plan to screen (F)" [disabled]="!viewport.view()">Fit</button>
   </div>
 
-  <div class="group" role="group" aria-label="Rotate">
-    <button class="btn btn-sm btn-icon" type="button" (click)="rotate(-90)" title="Rotate left (Shift+R)" [disabled]="!floor()?.planFile">⟲</button>
-    <button class="btn btn-sm btn-icon" type="button" (click)="rotate(90)" title="Rotate right (R)" [disabled]="!floor()?.planFile">⟳</button>
+  <div class="group" role="group" aria-label="Rotate plan">
+    <button class="btn btn-sm btn-icon" type="button" (click)="rotate(-90)" title="Rotate plan left" [disabled]="!floor()?.planFile">⟲</button>
+    <button class="btn btn-sm btn-icon" type="button" (click)="rotate(90)" title="Rotate plan right" [disabled]="!floor()?.planFile">⟳</button>
   </div>
 
   @if (pageNumbers().length > 1) {
     <label class="page-select">
       <span class="faint">Page</span>
-      <select class="input" [value]="floor()?.planPage" [disabled]="locked()" (change)="setPage(+$any($event.target).value)"
+      <select class="input" [disabled]="locked()" (change)="setPage(+$any($event.target).value)"
               [title]="locked() ? 'Unlock the plan to change its page' : 'Which PDF page is this floor’s plan'">
         @for (n of pageNumbers(); track n) {
           <option [value]="n" [selected]="n === floor()?.planPage">{{ n }} / {{ pageNumbers().length }}</option>
@@ -43,8 +51,8 @@
 
   <div class="spacer"></div>
 
-  @if (sync(); as s) {
-    <span class="save save-{{ s.status() }}" role="status" [title]="s.message() ?? ''">
+  @if (saveStatus(); as s) {
+    <span class="save save-{{ s }}" role="status" [title]="saveMessage() ?? ''">
       <span class="dot"></span>{{ saveLabel() }}
     </span>
   }
@@ -55,6 +63,10 @@
 
 <div class="body">
   <nav class="rail" aria-label="Tools">
+    <button class="tool" type="button" [class.active]="tools.tool() === 'select' || tools.tool() === 'place'" (click)="setTool('select')" title="Select and move (V)">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l14 8-6 1.5L10 19z" /></svg>
+      <span>Select</span>
+    </button>
     <button class="tool" type="button" [class.active]="tools.tool() === 'pan'" (click)="setTool('pan')" title="Pan (H). Middle mouse or Space+drag pans with any tool.">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V12M11 11.5v-8a1.5 1.5 0 0 1 3 0V12M14 6.5a1.5 1.5 0 0 1 3 0V13M17 8.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-1.5a6 6 0 0 1-5-2.7L5 15a1.6 1.6 0 0 1 2.6-1.9L8 14"/></svg>
       <span>Pan</span>
@@ -72,6 +84,10 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4zM4 9.3h16M4 14.6h16M9.3 4v16M14.6 4v16"/></svg>
       <span>Grid</span>
     </button>
+    <button class="tool" type="button" [class.active]="tools.snap()" (click)="tools.toggleSnap()" title="Snap to grid (S). Hold Alt to place freely.">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h3v3H5zM16 16h3v3h-3zM8 6.5h8a2 2 0 0 1 2 2V16"/></svg>
+      <span>Snap</span>
+    </button>
     <button class="tool" type="button" [class.active]="locked()" (click)="toggleLock()" [disabled]="!floor()" [title]="locked() ? 'Plan locked: page and scale cannot change. Click to unlock.' : 'Lock plan page and scale'">
       @if (locked()) {
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3"/></svg>
@@ -81,6 +97,14 @@
       <span>{{ locked() ? 'Locked' : 'Unlocked' }}</span>
     </button>
   </nav>
+
+  <aside class="left" aria-label="Library and layers">
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" [class.active]="leftTab() === 'library'" (click)="leftTab.set('library')">Components</button>
+      <button type="button" role="tab" [class.active]="leftTab() === 'layers'" (click)="leftTab.set('layers')">Layers</button>
+    </div>
+    @if (leftTab() === 'library') { <app-library-panel /> } @else { <app-layers-panel /> }
+  </aside>
 
   <main class="stage">
     @if (session.error(); as err) {
@@ -108,45 +132,58 @@
           <div class="banner banner-error floating" role="alert">{{ e }}
             <button class="btn btn-sm" type="button" (click)="renderError.set(null)">Dismiss</button>
           </div>
-        }
-        @if (!calibration() && tools.tool() !== 'calibrate') {
+        } @else if (!calibration() && tools.tool() !== 'calibrate') {
           <div class="banner banner-warn floating">
             This floor is not calibrated yet. Set the scale before measuring.
             <button class="btn btn-sm" type="button" (click)="setTool('calibrate')">Calibrate</button>
           </div>
         }
+        @if (tools.tool() === 'place') {
+          <div class="hint-bar">Click on the plan to place. <kbd>Esc</kbd> or right-click to stop.
+            {{ tools.snap() ? 'Snapping to grid (hold Alt to place freely).' : '' }}</div>
+        }
+        @if (toast(); as t) { <div class="toast" role="status">{{ t }}</div> }
       }
     }
   </main>
 
   <aside class="panel" aria-label="Properties">
     @if (floor(); as f) {
-      <section>
-        <h3>Floor</h3>
-        <div class="kv"><span class="faint">Name</span><span>{{ f.name }}</span></div>
-        @if (f.planFile) {
-          <div class="kv"><span class="faint">Plan</span><span class="ellipsis" [title]="f.planFile.originalName">{{ f.planFile.originalName }}</span></div>
-          <div class="kv"><span class="faint">Page</span><span>{{ f.planPage }} of {{ f.planFile.pageCount }}</span></div>
-          <div class="kv"><span class="faint">Rotation</span><span>{{ f.planRotation }}°</span></div>
-          @if (viewport.view(); as v) {
-            <div class="kv"><span class="faint">Sheet</span><span class="mono">{{ (v.page.width / 72 * 25.4).toFixed(0) }} × {{ (v.page.height / 72 * 25.4).toFixed(0) }} mm</span></div>
+      @if (drawing.selected().length) {
+        <section>
+          <h3>Selection</h3>
+          <app-properties-panel [floors]="project.hasValue() ? project.value().floors : []" [currentFloorId]="f.id"
+                                (copyToFloor)="copyToFloor($event)" />
+        </section>
+      } @else {
+        <section>
+          <h3>Floor</h3>
+          <div class="kv"><span class="faint">Name</span><span>{{ f.name }}</span></div>
+          @if (f.planFile) {
+            <div class="kv"><span class="faint">Plan</span><span class="ellipsis" [title]="f.planFile.originalName">{{ f.planFile.originalName }}</span></div>
+            <div class="kv"><span class="faint">Page</span><span>{{ f.planPage }} of {{ f.planFile.pageCount }}</span></div>
+            <div class="kv"><span class="faint">Rotation</span><span>{{ f.planRotation }}°</span></div>
+            <div class="kv"><span class="faint">Components</span><span>{{ drawing.components().length }}</span></div>
+            @if (viewport.view(); as v) {
+              <div class="kv"><span class="faint">Sheet</span><span class="mono">{{ (v.page.width / 72 * 25.4).toFixed(0) }} × {{ (v.page.height / 72 * 25.4).toFixed(0) }} mm</span></div>
+            }
           }
+        </section>
+        @if (f.planFile) {
+          <app-calibration-panel [floor]="f" [locked]="calibrationLocked()" [zoom]="viewport.view()?.zoom ?? 1"
+                                 (applied)="applyCalibration($event)" (confirmed)="confirmCalibration()" />
+          <app-measure-panel [calibration]="calibration()" />
         }
-      </section>
-      @if (f.planFile) {
-        <app-calibration-panel [floor]="f" [locked]="calibrationLocked()" [zoom]="viewport.view()?.zoom ?? 1"
-                               (applied)="applyCalibration($event)" (confirmed)="confirmCalibration()" />
-        <app-measure-panel [calibration]="calibration()" />
       }
-      @if (sync()?.message(); as m) {
-        <div class="banner" [class.banner-warn]="sync()?.status() !== 'error'" [class.banner-error]="sync()?.status() === 'error'">{{ m }}</div>
+      @if (saveMessage(); as m) {
+        <div class="banner" [class.banner-warn]="saveStatus() !== 'error'" [class.banner-error]="saveStatus() === 'error'">{{ m }}</div>
       }
       <section class="shortcuts">
         <h3>Shortcuts</h3>
-        <div><kbd>Wheel</kbd> zoom at cursor</div>
-        <div><kbd>Space</kbd>+drag or middle mouse: pan</div>
-        <div><kbd>F</kbd> fit · <kbd>R</kbd> rotate · <kbd>G</kbd> grid</div>
-        <div><kbd>H</kbd> pan · <kbd>M</kbd> measure · <kbd>C</kbd> scale</div>
+        <div><kbd>V</kbd> select · <kbd>H</kbd> pan · <kbd>M</kbd> measure · <kbd>C</kbd> scale</div>
+        <div><kbd>R</kbd> rotate · <kbd>Del</kbd> delete · <kbd>Arrows</kbd> nudge</div>
+        <div><kbd>Ctrl</kbd>+<kbd>Z</kbd>/<kbd>Y</kbd> undo/redo · <kbd>Ctrl</kbd>+<kbd>C</kbd>/<kbd>V</kbd>/<kbd>D</kbd></div>
+        <div><kbd>Wheel</kbd> zoom · <kbd>Space</kbd>+drag pan · <kbd>F</kbd> fit · <kbd>S</kbd> snap</div>
       </section>
     }
   </aside>

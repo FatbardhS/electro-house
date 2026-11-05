@@ -3,3 +3,6 @@ export * from './geometry/view-transform.js';
 export * from './calibration/calibration.js';
 export * from './schemas/schemas.js';
 export * from './dto/dto.js';
+export * from './catalog/types.js';
+export * from './catalog/catalog.js';
+export * from './drawing/drawing.js';

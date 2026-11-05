@@ -1,7 +1,7 @@
 import { Injectable, computed, signal } from '@angular/core';
 import type { Vec2 } from '@electro/shared';
 
-export type ToolId = 'pan' | 'measure' | 'calibrate';
+export type ToolId = 'select' | 'place' | 'pan' | 'measure' | 'calibrate';
 
 export type CalibrationStep = 'pick-first' | 'pick-second' | 'enter-distance';
 
@@ -11,7 +11,13 @@ export type CalibrationStep = 'pick-first' | 'pick-second' | 'enter-distance';
  */
 @Injectable()
 export class ToolsStore {
-  readonly tool = signal<ToolId>('pan');
+  readonly tool = signal<ToolId>('select');
+  /** Component type being placed when tool === 'place'. */
+  readonly placeType = signal<string | null>(null);
+  /** Snap placed / moved components to the grid. */
+  readonly snap = signal(readSnapPref());
+  /** Box selection rectangle in screen coordinates while dragging. */
+  readonly selectBox = signal<{ a: Vec2; b: Vec2 } | null>(null);
   /** Cursor position in plan coordinates while over the plan; null when outside. */
   readonly cursor = signal<Vec2 | null>(null);
   /** True while Shift is held: constrain to horizontal/vertical on screen. */
@@ -29,10 +35,27 @@ export class ToolsStore {
   });
 
   setTool(tool: ToolId): void {
+    if (tool !== 'place') this.placeType.set(null);
     if (this.tool() === tool) return;
     this.tool.set(tool);
+    this.selectBox.set(null);
     this.clearMeasure();
     this.calibrationPoints.set([]);
+  }
+
+  /** Start placing components of a type (click on the plan to place; Esc to stop). */
+  place(typeKey: string): void {
+    this.setTool('place');
+    this.placeType.set(typeKey);
+  }
+
+  toggleSnap(): void {
+    this.snap.update((v) => !v);
+    try {
+      localStorage.setItem('eh.snap', this.snap() ? '1' : '0');
+    } catch {
+      /* preference only */
+    }
   }
 
   // ── measure ──
@@ -88,4 +111,12 @@ export function constrainOrthogonal(
   const b = toScreen(p);
   const snapped = Math.abs(b.x - a.x) >= Math.abs(b.y - a.y) ? { x: b.x, y: a.y } : { x: a.x, y: b.y };
   return toPlan(snapped);
+}
+
+function readSnapPref(): boolean {
+  try {
+    return localStorage.getItem('eh.snap') !== '0';
+  } catch {
+    return true;
+  }
 }

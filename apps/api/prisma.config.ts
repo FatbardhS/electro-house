@@ -11,5 +11,7 @@ export default defineConfig({
   },
   datasource: {
     url: process.env['DATABASE_URL'],
+    // Only needed for `prisma dev` (its server holds a single database; the shadow database runs on the next port).
+    shadowDatabaseUrl: process.env['SHADOW_DATABASE_URL'] || undefined,
   },
 });

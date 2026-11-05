@@ -3,6 +3,8 @@ import { Injectable, inject } from '@angular/core';
 import { filter, firstValueFrom, map, type Observable } from 'rxjs';
 import type {
   ClientDto,
+  DrawingDto,
+  DrawingPatchInput,
   ClientInput,
   FloorDto,
   FloorSettingsInput,
@@ -60,6 +62,12 @@ export class Api {
   }
   updateFloorSettings(id: string, input: FloorSettingsInput) {
     return firstValueFrom(this.http.patch<FloorDto>(`/api/floors/${id}/settings`, input));
+  }
+  getDrawing(floorId: string) {
+    return firstValueFrom(this.http.get<DrawingDto>(`/api/floors/${floorId}/drawing`));
+  }
+  patchDrawing(floorId: string, input: DrawingPatchInput) {
+    return firstValueFrom(this.http.patch<{ revision: number }>(`/api/floors/${floorId}/drawing`, input));
   }
   planUrl(id: string) {
     return firstValueFrom(this.http.get<PlanUrlDto>(`/api/floors/${id}/plan-url`));

@@ -16,8 +16,7 @@
     "lint": "oxlint --type-aware src/ test/",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
-    "db:create-local": "node scripts/create-local-db.mjs"
+    "test:e2e": "vitest run --config ./vitest.config.e2e.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1163.0",
