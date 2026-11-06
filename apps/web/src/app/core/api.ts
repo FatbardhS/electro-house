@@ -2,8 +2,14 @@ import { HttpClient, HttpEventType } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { filter, firstValueFrom, map, type Observable } from 'rxjs';
 import type {
+  CircuitDto,
+  CircuitInput,
   ClientDto,
   DrawingDto,
+  ElectricalProfile,
+  FloorLinkDto,
+  FloorLinkInput,
+  InstallationDto,
   DrawingPatchInput,
   ClientInput,
   FloorDto,
@@ -68,6 +74,31 @@ export class Api {
   }
   patchDrawing(floorId: string, input: DrawingPatchInput) {
     return firstValueFrom(this.http.patch<{ revision: number }>(`/api/floors/${floorId}/drawing`, input));
+  }
+  // Installation (circuits, boards, floor connections)
+  getInstallation(projectId: string) {
+    return firstValueFrom(this.http.get<InstallationDto>(`/api/projects/${projectId}/installation`));
+  }
+  createCircuit(projectId: string, input: CircuitInput) {
+    return firstValueFrom(this.http.post<CircuitDto>(`/api/projects/${projectId}/circuits`, input));
+  }
+  updateCircuit(id: string, input: Partial<CircuitInput>) {
+    return firstValueFrom(this.http.patch<CircuitDto>(`/api/circuits/${id}`, input));
+  }
+  deleteCircuit(id: string) {
+    return firstValueFrom(this.http.delete<void>(`/api/circuits/${id}`));
+  }
+  createLink(projectId: string, input: FloorLinkInput) {
+    return firstValueFrom(this.http.post<FloorLinkDto>(`/api/projects/${projectId}/links`, input));
+  }
+  updateLink(id: string, input: Partial<FloorLinkInput>) {
+    return firstValueFrom(this.http.patch<FloorLinkDto>(`/api/links/${id}`, input));
+  }
+  deleteLink(id: string) {
+    return firstValueFrom(this.http.delete<void>(`/api/links/${id}`));
+  }
+  setElectricalProfile(projectId: string, profile: ElectricalProfile) {
+    return firstValueFrom(this.http.put<ElectricalProfile>(`/api/projects/${projectId}/electrical-profile`, profile));
   }
   planUrl(id: string) {
     return firstValueFrom(this.http.get<PlanUrlDto>(`/api/floors/${id}/plan-url`));

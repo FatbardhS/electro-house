@@ -47,6 +47,11 @@ export const routes: Routes = [
         title: 'Project · Electro House',
         loadComponent: () => import('./features/projects/project-detail.page').then((m) => m.ProjectDetailPage),
       },
+      {
+        path: 'projects/:projectId/installation',
+        title: 'Circuits & calculations · Electro House',
+        loadComponent: () => import('./features/installation/installation.page').then((m) => m.InstallationPage),
+      },
     ],
   },
   { path: '**', redirectTo: '' },

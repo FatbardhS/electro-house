@@ -27,6 +27,7 @@ export function toComponentDto(c: Component): ComponentDto {
     mountHeightMm: c.mountHeightMm,
     description: c.description,
     properties: (c.properties ?? {}) as Record<string, unknown>,
+    circuitId: c.circuitId,
   };
 }
 
@@ -116,6 +117,7 @@ export class DrawingService {
       if (foreign) throw new BadRequestException('A component in this change belongs to a different floor.');
     }
     await this.checkWires(floorId, finalUpserts, finalDeletes, wireUpserts, wireDeletes);
+    await this.checkCircuits(floor.projectId, finalUpserts, wireUpserts);
 
     const revision = await this.prisma.$transaction(async (tx) => {
       const bumped = await tx.floor.updateMany({
@@ -139,6 +141,7 @@ export class DrawingService {
           mountHeightMm: c.mountHeightMm,
           description: c.description,
           properties: c.properties as Prisma.InputJsonValue,
+          circuitId: c.circuitId ?? null,
         };
         await tx.component.upsert({ where: { id: c.id }, create: { id: c.id, floorId, ...data }, update: data });
       }
@@ -221,5 +224,15 @@ export class DrawingService {
         throw new BadRequestException('Disconnect or delete the wires attached to a component before deleting it.');
       }
     }
+  }
+
+  /** Circuit assignments must point at circuits of the same project. */
+  private async checkCircuits(projectId: string, comps: Map<string, ComponentDto>, wires: Map<string, WireDto>): Promise<void> {
+    const ids = new Set<string>();
+    for (const c of comps.values()) if (c.circuitId) ids.add(c.circuitId);
+    for (const w of wires.values()) if (w.circuitId) ids.add(w.circuitId);
+    if (!ids.size) return;
+    const found = await this.prisma.circuit.count({ where: { projectId, id: { in: [...ids] } } });
+    if (found !== ids.size) throw new BadRequestException('A circuit in this change does not belong to this project.');
   }
 }

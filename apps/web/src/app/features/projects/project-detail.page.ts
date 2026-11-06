@@ -34,6 +34,7 @@ import { STATUS_LABELS } from './status';
             </div>
           </div>
           <div style="display: flex; gap: 8px">
+            <a class="btn btn-primary" [routerLink]="['/projects', p.id, 'installation']">Circuits & calculations</a>
             <button class="btn" type="button" (click)="editing.set(true)">Edit</button>
             <button class="btn btn-danger" type="button" (click)="remove(p)">Delete</button>
           </div>

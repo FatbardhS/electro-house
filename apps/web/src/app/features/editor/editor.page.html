@@ -105,9 +105,14 @@
   <aside class="left" aria-label="Library and layers">
     <div class="tabs" role="tablist">
       <button type="button" role="tab" [class.active]="leftTab() === 'library'" (click)="leftTab.set('library')">Components</button>
+      <button type="button" role="tab" [class.active]="leftTab() === 'circuits'" (click)="leftTab.set('circuits')">Circuits</button>
       <button type="button" role="tab" [class.active]="leftTab() === 'layers'" (click)="leftTab.set('layers')">Layers</button>
     </div>
-    @if (leftTab() === 'library') { <app-library-panel /> } @else { <app-layers-panel /> }
+    @switch (leftTab()) {
+      @case ('library') { <app-library-panel /> }
+      @case ('circuits') { <app-circuits-panel [projectId]="projectId()" /> }
+      @default { <app-layers-panel /> }
+    }
   </aside>
 
   <main class="stage">

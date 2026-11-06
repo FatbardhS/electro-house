@@ -16,6 +16,8 @@ import { FloorsService } from './floors/floors.service.js';
 import { PlanFilesService } from './files/plan-files.service.js';
 import { DrawingController } from './drawing/drawing.controller.js';
 import { DrawingService } from './drawing/drawing.service.js';
+import { InstallationController } from './installation/installation.controller.js';
+import { InstallationService } from './installation/installation.service.js';
 
 @Module({
   imports: [
@@ -27,7 +29,7 @@ import { DrawingService } from './drawing/drawing.service.js';
       skipIf: () => process.env['NODE_ENV'] === 'test',
     }),
   ],
-  controllers: [AuthController, ClientsController, ProjectsController, FloorsController, DrawingController],
+  controllers: [AuthController, ClientsController, ProjectsController, FloorsController, DrawingController, InstallationController],
   providers: [
     AuthService,
     ClientsService,
@@ -35,6 +37,7 @@ import { DrawingService } from './drawing/drawing.service.js';
     FloorsService,
     PlanFilesService,
     DrawingService,
+    InstallationService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: SessionGuard },
     { provide: APP_FILTER, useClass: ApiExceptionFilter },

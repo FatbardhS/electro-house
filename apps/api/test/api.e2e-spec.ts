@@ -373,3 +373,78 @@ describe('wires', () => {
     expect(res.body.message).toMatch(/does not exist on this floor/);
   });
 });
+
+describe('circuits, boards and floor connections', () => {
+  const { createComponent, uuidv7, DEFAULT_CIRCUIT, DEFAULT_CABLE, circuitLoads } = shared;
+  async function setup(company: string) {
+    const { agent } = await signUp(company);
+    const client = (await agent.post('/api/clients').send({ name: 'C' })).body;
+    const project = (await agent.post('/api/projects').send({ clientId: client.id, name: 'P' })).body;
+    const ground = (await agent.post(`/api/projects/${project.id}/floors`).send({ name: 'Ground floor' })).body as FloorDto;
+    const first = (await agent.post(`/api/projects/${project.id}/floors`).send({ name: 'First floor' })).body as FloorDto;
+    return { agent, project, ground, first };
+  }
+
+  it('creates a circuit fed from a board, assigns components and computes the load', async () => {
+    const { agent, project, ground } = await setup('Circuit Co');
+    const board = createComponent('board.main', { x: 0, y: 0 }, uuidv7(), []);
+    const lamp = { ...createComponent('light.ceiling', { x: 10, y: 10 }, uuidv7(), []), properties: { powerW: 2300 } };
+    await agent.patch(`/api/floors/${ground.id}/drawing`).send({ baseRevision: 0, ops: [{ op: 'upsert', component: board }, { op: 'upsert', component: lamp }] }).expect(200);
+
+    const circuit = (await agent.post(`/api/projects/${project.id}/circuits`).send({ ...DEFAULT_CIRCUIT, boardComponentId: board.id }).expect(201)).body;
+    await agent
+      .patch(`/api/floors/${ground.id}/drawing`)
+      .send({ baseRevision: 1, ops: [{ op: 'upsert', component: { ...lamp, circuitId: circuit.id } }] })
+      .expect(200);
+
+    const inst = (await agent.get(`/api/projects/${project.id}/installation`).expect(200)).body;
+    expect(inst.circuits).toHaveLength(1);
+    const [load] = circuitLoads(inst);
+    expect(load).toMatchObject({ componentCount: 1, loadW: 2300 });
+    expect(load.designCurrentA).toBeCloseTo(10, 6);
+  });
+
+  it('only accepts real distribution boards of the same project and circuits of the same project', async () => {
+    const { agent, project, ground } = await setup('Circuit Check Co');
+    const lamp = createComponent('light.ceiling', { x: 10, y: 10 }, uuidv7(), []);
+    await agent.patch(`/api/floors/${ground.id}/drawing`).send({ baseRevision: 0, ops: [{ op: 'upsert', component: lamp }] }).expect(200);
+    const res = await agent.post(`/api/projects/${project.id}/circuits`).send({ ...DEFAULT_CIRCUIT, boardComponentId: lamp.id }).expect(400);
+    expect(res.body.message).toMatch(/only be fed from a distribution board/);
+
+    const other = await setup('Circuit Other Co');
+    const foreign = (await other.agent.post(`/api/projects/${other.project.id}/circuits`).send(DEFAULT_CIRCUIT).expect(201)).body;
+    await agent
+      .patch(`/api/floors/${ground.id}/drawing`)
+      .send({ baseRevision: 1, ops: [{ op: 'upsert', component: { ...lamp, circuitId: foreign.id } }] })
+      .expect(400);
+    await agent.patch(`/api/circuits/${foreign.id}`).send({ name: 'x' }).expect(404);
+  });
+
+  it('links components on different floors, refuses same-floor links, and keeps components when a circuit is deleted', async () => {
+    const { agent, project, ground, first } = await setup('Link Co');
+    const main = createComponent('board.main', { x: 0, y: 0 }, uuidv7(), []);
+    const sub = createComponent('board.sub', { x: 0, y: 0 }, uuidv7(), []);
+    const jb = createComponent('dist.junction-box', { x: 5, y: 5 }, uuidv7(), []);
+    await agent.patch(`/api/floors/${ground.id}/drawing`).send({ baseRevision: 0, ops: [{ op: 'upsert', component: main }, { op: 'upsert', component: jb }] }).expect(200);
+    await agent.patch(`/api/floors/${first.id}/drawing`).send({ baseRevision: 0, ops: [{ op: 'upsert', component: sub }] }).expect(200);
+    const link = { fromComponentId: main.id, toComponentId: sub.id, lengthM: 6.5, cable: { ...DEFAULT_CABLE, conductors: 5, crossSectionMm2: 6 }, circuitId: null, description: null };
+    const created = (await agent.post(`/api/projects/${project.id}/links`).send(link).expect(201)).body;
+    expect(created).toMatchObject({ lengthM: 6.5, fromComponentId: main.id });
+    await agent.post(`/api/projects/${project.id}/links`).send({ ...link, toComponentId: jb.id }).expect(400);
+
+    const circuit = (await agent.post(`/api/projects/${project.id}/circuits`).send({ ...DEFAULT_CIRCUIT, boardComponentId: sub.id }).expect(201)).body;
+    await agent.patch(`/api/links/${created.id}`).send({ circuitId: circuit.id }).expect(200);
+    await agent.delete(`/api/circuits/${circuit.id}`).expect(204);
+    const inst = (await agent.get(`/api/projects/${project.id}/installation`)).body;
+    expect(inst.links[0].circuitId).toBeNull();
+    expect(inst.floors.flatMap((f: { components: unknown[] }) => f.components)).toHaveLength(3);
+  });
+
+  it('stores the electrical rules profile per project', async () => {
+    const { agent, project } = await setup('Profile Co');
+    const profile = { name: 'My rules', maxBreakerByCrossSection: { '1.5': 16, '2.5': 20 }, powerFactor: 0.95 };
+    await agent.put(`/api/projects/${project.id}/electrical-profile`).send(profile).expect(200);
+    await agent.put(`/api/projects/${project.id}/electrical-profile`).send({ ...profile, powerFactor: 3 }).expect(400);
+    expect((await agent.get(`/api/projects/${project.id}/installation`)).body.profile).toEqual(profile);
+  });
+});

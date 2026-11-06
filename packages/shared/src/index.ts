@@ -7,3 +7,4 @@ export * from './catalog/types.js';
 export * from './catalog/catalog.js';
 export * from './drawing/drawing.js';
 export * from './drawing/wires.js';
+export * from './installation/installation.js';

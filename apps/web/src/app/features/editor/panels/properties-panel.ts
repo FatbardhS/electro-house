@@ -30,6 +30,11 @@ import { DrawingStore } from '../state/drawing.store';
         <select class="input" [value]="c.layerKey" (change)="commit({ layerKey: $any(val($event)) }, 'Change layer')">
           @for (k of layerKeys; track k) { <option [value]="k" [selected]="k === c.layerKey">{{ layerNames[k] }}</option> }
         </select></label>
+      <label class="f"><span>Circuit</span>
+        <select class="input" (change)="drawing.assignSelectionToCircuit(val($event) || null)">
+          <option value="" [selected]="!c.circuitId">— not assigned —</option>
+          @for (k of drawing.circuits(); track k.id) { <option [value]="k.id" [selected]="k.id === c.circuitId">{{ k.number }} · {{ k.name }}</option> }
+        </select></label>
       <div class="two">
         <label class="f"><span>Rotation (°)</span>
           <input class="input mono" type="number" step="15" [value]="c.rotation" (change)="commitRotation($event)" /></label>
@@ -69,6 +74,12 @@ import { DrawingStore } from '../state/drawing.store';
         <select class="input" (change)="commit({ layerKey: $any(val($event)) }, 'Change layer')">
           <option value="" selected disabled>Move all to layer…</option>
           @for (k of layerKeys; track k) { <option [value]="k">{{ layerNames[k] }}</option> }
+        </select></label>
+      <label class="f"><span>Circuit, all</span>
+        <select class="input" (change)="drawing.assignSelectionToCircuit(val($event) === '-' ? null : val($event))">
+          <option value="" selected disabled>Assign all to circuit…</option>
+          <option value="-">— remove from circuit —</option>
+          @for (k of drawing.circuits(); track k.id) { <option [value]="k.id">{{ k.number }} · {{ k.name }}</option> }
         </select></label>
       <label class="f"><span>Height (mm), all</span>
         <input class="input mono" type="number" min="0" max="20000" step="50" placeholder="unchanged" (change)="commitHeight($event)" /></label>

@@ -30,6 +30,11 @@ import { ToolsStore } from '../state/tools.store';
       </div>
       <label class="f"><span>Label</span>
         <input class="input" [value]="w.label ?? ''" maxlength="40" placeholder="e.g. W1" (change)="setLabel($event)" /></label>
+      <label class="f"><span>Circuit</span>
+        <select class="input" (change)="drawing.assignSelectionToCircuit(val($event) || null)">
+          <option value="" [selected]="!w.circuitId">— not assigned —</option>
+          @for (k of drawing.circuits(); track k.id) { <option [value]="k.id" [selected]="k.id === w.circuitId">{{ k.number }} · {{ k.name }}</option> }
+        </select></label>
       <div class="two">
         <label class="f"><span>Cable type</span>
           <select class="input" (change)="setCable({ cableType: $any(val($event)) || undefined })">

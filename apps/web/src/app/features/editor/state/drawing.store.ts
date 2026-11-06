@@ -4,6 +4,7 @@ import {
   detachEnds,
   normalizeDegrees,
   syncEnds,
+  type CircuitDto,
   type ComponentDto,
   type ComponentLookup,
   type DrawingDto,
@@ -66,6 +67,12 @@ export class DrawingStore {
   readonly layers = signal<LayerStateDto[]>([]);
   /** Selected component and wire ids. */
   readonly selection = signal<ReadonlySet<string>>(new Set());
+  /** Circuits of the project (project-level; components and wires reference them by id). */
+  readonly circuits = signal<CircuitDto[]>([]);
+  /** Distribution boards anywhere in the project (circuits are fed from these). */
+  readonly projectBoards = signal<{ id: string; label: string; floorName: string }[]>([]);
+  /** When set, everything not on this circuit is dimmed on the plan. */
+  readonly highlightCircuit = signal<string | null>(null);
   readonly loaded = signal(false);
 
   private undoStack: Command[] = [];
@@ -339,6 +346,18 @@ export class DrawingStore {
     const moved = this.movedBy(snap, dx, dy, wireIds);
     this.preview(moved);
     this.commitPreview(label, snap);
+  }
+
+  /** Assigns (or with null, unassigns) every selected component and wire to a circuit. One undo step. */
+  assignSelectionToCircuit(circuitId: string | null): number {
+    const comps = this.selected();
+    const wires = this.selectedWires();
+    const changes: Change[] = [
+      ...comps.map((c): Change => ({ kind: 'component', id: c.id, before: c, after: { ...c, circuitId } })),
+      ...wires.map((w): Change => ({ kind: 'wire', id: w.id, before: w, after: { ...w, circuitId } })),
+    ];
+    this.execute({ label: circuitId ? 'Assign to circuit' : 'Remove from circuit', changes });
+    return changes.length;
   }
 
   // ── selection ──

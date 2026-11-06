@@ -18,6 +18,8 @@ export interface ComponentDto {
   mountHeightMm: number | null;
   description: string | null;
   properties: Record<string, unknown>;
+  /** Circuit this component is assigned to (project-level, see installation.ts). */
+  circuitId: string | null;
 }
 
 export interface LayerStateDto {
@@ -49,6 +51,7 @@ export const componentSchema = z.object({
   mountHeightMm: z.number().int().min(0).max(20_000).nullable(),
   description: z.string().max(2000).nullable(),
   properties: z.record(z.string(), z.unknown()),
+  circuitId: z.uuid().nullable().default(null),
 });
 
 export const drawingOpSchema = z.discriminatedUnion('op', [
@@ -175,6 +178,7 @@ export function createComponent(
     mountHeightMm: type.defaultMountHeightMm ?? null,
     description: null,
     properties: { ...type.defaults },
+    circuitId: null,
   };
 }
 

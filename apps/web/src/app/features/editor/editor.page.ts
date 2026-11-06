@@ -27,6 +27,7 @@ import {
   type WireEndDto,
   type Calibration,
   type ComponentDto,
+  type InstallationDto,
   type ProjectDto,
 } from '@electro/shared';
 import { Api } from '../../core/api';
@@ -39,6 +40,7 @@ import { LibraryPanel } from './panels/library-panel';
 import { MeasurePanel } from './panels/measure-panel';
 import { PropertiesPanel } from './panels/properties-panel';
 import { WirePanel } from './panels/wire-panel';
+import { CircuitsPanel } from './panels/circuits-panel';
 import { openPdf, planPageSize, type OpenedPdf } from './pdf/pdf-document';
 import { DrawingSync } from './state/drawing-sync';
 import { DrawingStore } from './state/drawing.store';
@@ -79,6 +81,7 @@ let clipboard: { components: ComponentDto[]; wires: WireDto[] } = { components: 
     LayersPanel,
     PropertiesPanel,
     WirePanel,
+    CircuitsPanel,
     SymbolDefs,
     LoadingState,
     ErrorState,
@@ -103,6 +106,8 @@ export class EditorPage {
   readonly floorId = input.required<string>();
 
   protected readonly project = httpResource<ProjectDto>(() => `/api/projects/${this.projectId()}`);
+  /** Whole-project electrical data: circuits and distribution boards on every floor. */
+  protected readonly installation = httpResource<InstallationDto>(() => `/api/projects/${this.projectId()}/installation`);
 
   /** Floor, its drawing and its PDF. Re-runs when the floor changes; the previous one is saved and closed first. */
   protected readonly session = resource<EditorSession, string>({
@@ -153,7 +158,7 @@ export class EditorPage {
 
   protected readonly showGrid = signal(readGridPref());
   protected readonly isFullscreen = signal(false);
-  protected readonly leftTab = signal<'library' | 'layers'>('library');
+  protected readonly leftTab = signal<'library' | 'circuits' | 'layers'>('library');
   protected readonly renderError = signal<string | null>(null);
   protected readonly uploadState = signal<{ progress: number } | null>(null);
   protected readonly uploadError = signal<string | null>(null);
@@ -199,6 +204,21 @@ export class EditorPage {
         const pageSize = planPageSize(page);
         if (this.viewport.view()) this.viewport.setPage(pageSize);
         else this.viewport.init(floor.id, pageSize, floor.planRotation);
+      });
+    });
+
+    // Circuits and boards come from the whole project; boards on this floor come from the live drawing.
+    effect(() => {
+      const inst = this.installation.hasValue() ? this.installation.value() : null;
+      const floorId = this.floorId();
+      const here = this.drawing.components().filter((c) => c.typeKey.startsWith('board.'));
+      untracked(() => {
+        if (inst) this.drawing.circuits.set(inst.circuits);
+        const others = (inst?.floors ?? [])
+          .filter((f) => f.floorId !== floorId)
+          .flatMap((f) => f.components.filter((c) => c.typeKey.startsWith('board.')).map((c) => ({ id: c.id, label: c.label ?? 'Board', floorName: f.name })));
+        const floorName = this.floor()?.name ?? 'This floor';
+        this.drawing.projectBoards.set([...here.map((c) => ({ id: c.id, label: c.label ?? 'Board', floorName })), ...others]);
       });
     });
 

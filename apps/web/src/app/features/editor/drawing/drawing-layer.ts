@@ -54,7 +54,8 @@ export function componentTransform(c: { x: number; y: number; rotation: number }
               @if (w.selected) {
                 <polyline class="wire-sel" [attr.points]="w.points" vector-effect="non-scaling-stroke" />
               }
-              <polyline [attr.points]="w.points" [attr.stroke]="w.color" [attr.stroke-width]="wireWidth" [attr.stroke-dasharray]="w.dash" />
+              <polyline [attr.points]="w.points" [attr.stroke]="w.color" [attr.stroke-width]="wireWidth" [attr.stroke-dasharray]="w.dash"
+                        [style.opacity]="w.dim ? 0.15 : null" />
               @if (w.label) {
                 <text class="label" [attr.x]="w.labelAt.x" [attr.y]="w.labelAt.y" [attr.font-size]="labelSize" [style.fill]="w.color">{{ w.label }}</text>
               }
@@ -67,7 +68,7 @@ export function componentTransform(c: { x: number; y: number; rotation: number }
           <!-- Electrical components, by layer, in draw order -->
           <g class="components">
             @for (c of items(); track c.id) {
-              <g [attr.transform]="c.transform" [style.color]="c.color">
+              <g [attr.transform]="c.transform" [style.color]="c.color" [style.opacity]="c.dim ? 0.18 : null">
                 <use [attr.href]="c.href" />
               </g>
               @if (c.label) {
@@ -156,6 +157,7 @@ export class DrawingLayer {
   protected readonly wireItems = computed(() => {
     const lookup = this.drawing.lookup();
     const sel = this.drawing.selection();
+    const hl = this.drawing.highlightCircuit();
     return this.drawing.visibleWires().map((w) => {
       const route = wireRoute(w, lookup);
       // label at the middle of the longest segment
@@ -176,6 +178,7 @@ export class DrawingLayer {
         color: w.cable.color,
         dash: dashArray(w.cable.lineStyle),
         selected: sel.has(w.id),
+        dim: !!hl && w.circuitId !== hl,
         label: w.label,
         labelAt: at,
       };
@@ -214,22 +217,24 @@ export class DrawingLayer {
   protected readonly labelSize = 2.2 * MM_TO_PT;
 
   /** Render data for every visible component (transform strings computed once per change). */
-  protected readonly items = computed(() =>
-    this.drawing.visible().map((c) => {
+  protected readonly items = computed(() => {
+    const hl = this.drawing.highlightCircuit();
+    return this.drawing.visible().map((c) => {
       const type = componentType(c.typeKey);
       const r = (type?.symbol.hitRadiusMm ?? 3) * MM_TO_PT;
       const note = c.typeKey === 'annotation.note' ? String(c.properties['text'] ?? '') : '';
       return {
         id: c.id,
         transform: componentTransform(c),
+        dim: !!hl && c.circuitId !== hl,
         href: `#${symbolId(c.typeKey)}`,
         color: LAYER_COLORS[c.layerKey],
         label: note || c.label,
         labelX: c.x + r * 0.9,
         labelY: c.y - r * 0.9,
       };
-    }),
-  );
+    });
+  });
 
   protected readonly selectionRings = computed(() =>
     this.drawing.selected().map((c) => ({ id: c.id, x: c.x, y: c.y, r: hitRadius(c) * 1.15 })),
