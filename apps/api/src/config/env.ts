@@ -5,8 +5,8 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
   WEB_ORIGIN: z.url(),
   DATABASE_URL: z.string().startsWith('postgres', 'DATABASE_URL must be a PostgreSQL connection string'),
-  /** `s3` for any S3-compatible service (production, MinIO). `local` stores files on disk — development only. */
-  STORAGE_DRIVER: z.enum(['s3', 'local']).default('s3'),
+  /** `s3` for any S3-compatible service (production, MinIO); `database` keeps files in PostgreSQL (small test deployments); `local` stores files on disk — development only. */
+  STORAGE_DRIVER: z.enum(['s3', 'local', 'database']).default('s3'),
   LOCAL_STORAGE_DIR: z.string().min(1).default('.storage'),
   S3_ENDPOINT: z.url().optional(),
   S3_REGION: z.string().min(1).default('us-east-1'),
@@ -59,7 +59,8 @@ let cached: Env | undefined;
 /** Validated environment. Fails fast at start-up with a readable list of what is missing or wrong. */
 export function env(): Env {
   if (cached) return cached;
-  const parsed = envSchema.safeParse(process.env);
+  // On Render, the public address is provided as RENDER_EXTERNAL_URL: use it when WEB_ORIGIN is not set.
+  const parsed = envSchema.safeParse({ ...process.env, WEB_ORIGIN: process.env['WEB_ORIGIN'] || process.env['RENDER_EXTERNAL_URL'] });
   if (!parsed.success) {
     const problems = parsed.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`).join('\n');
     throw new Error(`Invalid environment configuration (see apps/api/.env.example):\n${problems}`);

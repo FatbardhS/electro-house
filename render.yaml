@@ -1,5 +1,16 @@
-# Render Blueprint: one free web service runs the API and serves the Angular app on the same address.
-# Database and file storage are external (Supabase free tier). See docs/DEPLOY.md.
+# Render Blueprint: everything on Render's free tier, no other accounts and no keys to copy.
+# - one free web service runs the API and serves the Angular app on the same address
+# - one free PostgreSQL database holds the data and the plan PDFs (STORAGE_DRIVER=database)
+# - the public address is detected automatically (RENDER_EXTERNAL_URL)
+# - billing is switched off: every company has full access
+# Note: Render deletes free databases 30 days after creation. See docs/DEPLOY.md.
+databases:
+  - name: electro-house-db
+    plan: free
+    region: frankfurt
+    databaseName: electro
+    user: electro
+
 services:
   - type: web
     name: electro-house
@@ -17,30 +28,11 @@ services:
         value: production
       - key: NODE_VERSION
         value: "24"
-      # The public address of this service, e.g. https://electro-house.onrender.com (no trailing slash).
-      - key: WEB_ORIGIN
-        sync: false
-      # Supabase → Connect → Session pooler connection string (port 5432).
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: electro-house-db
+          property: connectionString
       - key: STORAGE_DRIVER
-        value: s3
-      # Supabase → Storage → S3 connection.
-      - key: S3_ENDPOINT
-        sync: false
-      - key: S3_REGION
-        sync: false
-      - key: S3_BUCKET
-        value: plans
-      - key: S3_ACCESS_KEY_ID
-        sync: false
-      - key: S3_SECRET_ACCESS_KEY
-        sync: false
-      - key: S3_FORCE_PATH_STYLE
-        value: "true"
-      # Plans are streamed through the API: no presigned URLs or bucket CORS needed.
-      - key: S3_PROXY_READS
-        value: "true"
-      # Billing is switched off for testing: every company has full access.
+        value: database
       - key: BILLING_PROVIDER
         value: none

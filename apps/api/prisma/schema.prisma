@@ -361,6 +361,15 @@ model BillingEvent {
   @@index([organizationId])
 }
 
+// ── File storage in the database ─────────────────────────────
+
+/// File contents for STORAGE_DRIVER=database (small deployments without object storage). Key = StoredFile.storageKey.
+model FileBlob {
+  key       String   @id
+  data      Bytes
+  createdAt DateTime @default(now())
+}
+
 // ── Team ──────────────────────────────────────────────────────
 
 /// Single-use invitation to join a company. Only the SHA-256 of the link token is stored.
