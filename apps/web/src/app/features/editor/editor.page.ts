@@ -23,6 +23,10 @@ import {
   uuidv7,
   syncEnds,
   wireLengthUnits,
+  wireRoute,
+  applyIgnored,
+  runChecks,
+  type Issue,
   type WireDto,
   type WireEndDto,
   type Calibration,
@@ -42,6 +46,7 @@ import { MeasurePanel } from './panels/measure-panel';
 import { PropertiesPanel } from './panels/properties-panel';
 import { WirePanel } from './panels/wire-panel';
 import { CircuitsPanel } from './panels/circuits-panel';
+import { ChecksPanel } from './panels/checks-panel';
 import { openPdf, planPageSize, type OpenedPdf } from './pdf/pdf-document';
 import { DrawingSync } from './state/drawing-sync';
 import { DrawingStore } from './state/drawing.store';
@@ -83,6 +88,7 @@ let clipboard: { components: ComponentDto[]; wires: WireDto[] } = { components: 
     PropertiesPanel,
     WirePanel,
     CircuitsPanel,
+    ChecksPanel,
     SymbolDefs,
     LoadingState,
     ErrorState,
@@ -109,6 +115,8 @@ export class EditorPage {
 
   readonly projectId = input.required<string>();
   readonly floorId = input.required<string>();
+  /** `?select=id,id` deep link (from the project's Checks tab): select these and zoom to them once loaded. */
+  readonly select = input<string | undefined>();
 
   protected readonly project = httpResource<ProjectDto>(() => `/api/projects/${this.projectId()}`);
   /** Whole-project electrical data: circuits and distribution boards on every floor. */
@@ -163,7 +171,48 @@ export class EditorPage {
 
   protected readonly showGrid = signal(readGridPref());
   protected readonly isFullscreen = signal(false);
-  protected readonly leftTab = signal<'library' | 'circuits' | 'layers'>('library');
+  protected readonly leftTab = signal<'library' | 'circuits' | 'layers' | 'checks'>('library');
+
+  /** Validation checks on the project with this floor's live (possibly unsaved) drawing. */
+  private readonly liveChecks = computed(() => {
+    const inst = this.installation.hasValue() ? this.installation.value() : null;
+    if (!inst) return null;
+    const floorId = this.floorId();
+    const live: InstallationDto = {
+      ...inst,
+      circuits: this.drawing.circuits().length ? this.drawing.circuits() : inst.circuits,
+      floors: inst.floors.map((f) => (f.floorId === floorId ? { ...f, components: this.drawing.components(), wires: this.drawing.wires() } : f)),
+    };
+    return applyIgnored(runChecks(live), inst.ignoredIssues);
+  });
+  protected readonly floorIssues = computed(() => (this.liveChecks()?.open ?? []).filter((i) => i.floorId === this.floorId() || i.floorId === null));
+  protected readonly floorErrors = computed(() => this.floorIssues().filter((i) => i.severity === 'error').length);
+  protected readonly ignoredCount = computed(() => this.liveChecks()?.summary.ignored ?? 0);
+
+  /** Selects what an issue points at and zooms to it. */
+  protected focusIssue(issue: Issue): void {
+    this.focusIds([...issue.componentIds, ...issue.wireIds]);
+  }
+
+  private focusIds(ids: readonly string[]): void {
+    const comps = this.drawing.components().filter((c) => ids.includes(c.id));
+    const wires = this.drawing.wires().filter((w) => ids.includes(w.id));
+    if (!comps.length && !wires.length) return;
+    this.tools.setTool('select');
+    this.drawing.select([...comps.map((c) => c.id), ...wires.map((w) => w.id)]);
+    const byId = new Map(this.drawing.components().map((c) => [c.id, c]));
+    this.viewport.focusOn([...comps.map((c) => ({ x: c.x, y: c.y })), ...wires.flatMap((w) => wireRoute(w, (id) => byId.get(id)))]);
+  }
+
+  /** Applies `?select=` once the drawing of the floor is loaded (and the view exists). */
+  private appliedSelect: string | null = null;
+  private readonly applySelect = effect(() => {
+    const sel = this.select();
+    const ready = this.session.hasValue() && !!this.viewport.view() && this.drawing.components().length > 0;
+    if (!sel || !ready || this.appliedSelect === `${this.floorId()}|${sel}`) return;
+    this.appliedSelect = `${this.floorId()}|${sel}`;
+    untracked(() => this.focusIds(sel.split(',').filter(Boolean)));
+  });
   protected readonly renderError = signal<string | null>(null);
   protected readonly uploadState = signal<{ progress: number } | null>(null);
   protected readonly uploadError = signal<string | null>(null);

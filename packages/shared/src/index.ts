@@ -15,3 +15,4 @@ export * from './reports/bom.js';
 export * from './reports/export.js';
 export * from './drawing/style.js';
 export * from './billing/billing.js';
+export * from './validation/checks.js';

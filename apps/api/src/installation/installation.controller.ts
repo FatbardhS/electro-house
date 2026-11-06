@@ -6,6 +6,8 @@ import {
   floorLinkInputSchema,
   floorLinkUpdateSchema,
   floorHeightsSchema,
+  ignoreIssueSchema,
+  type IgnoredIssue,
   projectCostSettingsSchema,
   type FloorHeightsInput,
   type ProjectCostSettings,
@@ -45,6 +47,26 @@ export class InstallationController {
     @Body(new ZodPipe(projectCostSettingsSchema)) body: ProjectCostSettings,
   ): Promise<ProjectCostSettings> {
     return this.installation.setCostSettings(auth.organizationId, id, body);
+  }
+
+  @Post('projects/:id/ignored-issues')
+  @HttpCode(200)
+  ignoreIssue(
+    @Auth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(ignoreIssueSchema)) body: { issueId: string },
+  ): Promise<IgnoredIssue[]> {
+    return this.installation.ignoreIssue(auth, id, body.issueId);
+  }
+
+  @Post('projects/:id/ignored-issues/restore')
+  @HttpCode(200)
+  restoreIssue(
+    @Auth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(ignoreIssueSchema)) body: { issueId: string },
+  ): Promise<IgnoredIssue[]> {
+    return this.installation.restoreIssue(auth, id, body.issueId);
   }
 
   @Put('floors/:id/heights')

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, effect, inject, input, output, signal } from '@angular/core';
-import { CROSS_SECTIONS_MM2, electricalProfileSchema, type ElectricalProfile } from '@electro/shared';
+import { CIRCUIT_CATEGORIES, CROSS_SECTIONS_MM2, electricalProfileSchema, type ElectricalProfile } from '@electro/shared';
 import { Api } from '../../core/api';
 import { toApiError } from '../../core/api-error';
 
@@ -34,6 +34,20 @@ import { toApiError } from '../../core/api-error';
         }
       </div>
 
+      <h3>Voltage drop</h3>
+      <label class="f narrow"><span>Maximum voltage drop % (empty = not checked)</span>
+        <input class="input mono" type="number" min="0.1" max="50" step="0.1" [value]="maxDrop()" placeholder="—"
+               (input)="maxDrop.set(val($event))" /></label>
+      <p class="faint small">Estimated along the longest cable path from the board to a component of each circuit
+        (copper, ρ = 0.0225 Ω·mm²/m), using the circuit's estimated current and cross-section.</p>
+
+      <h3>Circuit categories that need RCD protection</h3>
+      <div class="cats">
+        @for (c of categories; track c) {
+          <label class="check"><input type="checkbox" [checked]="rcd().has(c)" (change)="toggleRcd(c)" /> {{ c }}</label>
+        }
+      </div>
+
       @if (error(); as e) { <div class="banner banner-error" role="alert">{{ e }}</div> }
       @if (saved()) { <div class="banner banner-ok" role="status">Rules saved. Circuit warnings are updated.</div> }
       <div class="actions">
@@ -54,6 +68,8 @@ import { toApiError } from '../../core/api-error';
     .banner { margin-top: 14px; }
     .banner-ok { background: rgba(80, 200, 120, 0.12); color: var(--text); padding: 10px 12px; border-radius: 6px; }
     .actions { margin-top: 16px; }
+    .cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 4px 14px; font-size: 13px; }
+    .check { display: flex; gap: 8px; align-items: center; }
   `,
 })
 export class ProfileForm {
@@ -66,6 +82,9 @@ export class ProfileForm {
   protected readonly name = signal('');
   protected readonly powerFactor = signal('1');
   protected readonly limits = signal<Record<string, string>>({});
+  protected readonly maxDrop = signal('');
+  protected readonly rcd = signal(new Set<string>());
+  protected readonly categories = CIRCUIT_CATEGORIES;
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly saved = signal(false);
@@ -77,6 +96,8 @@ export class ProfileForm {
       this.name.set(p.name);
       this.powerFactor.set(String(p.powerFactor));
       this.limits.set(Object.fromEntries(Object.entries(p.maxBreakerByCrossSection).map(([k, v]) => [k, String(v)])));
+      this.maxDrop.set(p.maxVoltageDropPct === null ? '' : String(p.maxVoltageDropPct));
+      this.rcd.set(new Set(p.rcdRequiredCategories));
     });
   }
 
@@ -87,6 +108,16 @@ export class ProfileForm {
   protected val(e: Event): string {
     this.saved.set(false);
     return (e.target as HTMLInputElement).value.trim();
+  }
+
+  protected toggleRcd(c: string): void {
+    this.saved.set(false);
+    this.rcd.update((set) => {
+      const next = new Set(set);
+      if (next.has(c)) next.delete(c);
+      else next.add(c);
+      return next;
+    });
   }
 
   protected setLimit(s: number, e: Event): void {
@@ -109,10 +140,19 @@ export class ProfileForm {
       name: this.name(),
       powerFactor: Number(this.powerFactor()),
       maxBreakerByCrossSection: max,
+      maxVoltageDropPct: this.maxDrop().trim() === '' ? null : Number(this.maxDrop()),
+      rcdRequiredCategories: CIRCUIT_CATEGORIES.filter((c) => this.rcd().has(c)),
     });
     if (!check.success) {
       const issue = check.error.issues[0];
-      this.error.set(issue?.path[0] === 'powerFactor' ? 'Power factor must be between 0.1 and 1.' : (issue?.message ?? 'Invalid rules.'));
+      const field = issue?.path[0];
+      this.error.set(
+        field === 'powerFactor'
+          ? 'Power factor must be between 0.1 and 1.'
+          : field === 'maxVoltageDropPct'
+            ? 'Maximum voltage drop must be a number between 0.1 and 50 %.'
+            : (issue?.message ?? 'Invalid rules.'),
+      );
       return;
     }
     this.error.set(null);

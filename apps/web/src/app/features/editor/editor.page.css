@@ -254,7 +254,8 @@
   border-right: 1px solid var(--border);
 }
 .tabs {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 4px;
   margin-bottom: 10px;
 }
@@ -272,6 +273,18 @@
   border-color: var(--accent);
   color: var(--accent);
   background: var(--accent-soft);
+}
+.tabs .count {
+  margin-left: 4px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.tabs .count.err {
+  background: rgba(240, 106, 106, 0.16);
+  color: #ff8a8a;
 }
 .hint-bar {
   position: absolute;

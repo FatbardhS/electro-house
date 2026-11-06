@@ -2,6 +2,11 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PDFDocument, popGraphicsState, pushGraphicsState, type PDFImage } from 'pdf-lib';
 import {
   CATEGORY_NAMES,
+  CHECKS,
+  applyIgnored,
+  runChecks,
+  type MaterialDto,
+  type MaterialRuleDto,
   EXPORT_SECTION_NAMES,
   LAYER_COLORS,
   LAYER_NAMES,
@@ -28,6 +33,8 @@ import { PricingService } from '../pricing/pricing.service.js';
 import { MM, cm, embedFonts, symbolOps, type Fonts } from './pdf-graphics.js';
 import { drawPlanSheet, type EmbeddedPlan, type TitleBlock } from './plan-sheet.js';
 import { ReportWriter } from './report-writer.js';
+import { dxfFileName, floorToDxf } from './dxf.js';
+import { zip } from './zip.js';
 
 const n0 = (v: number) => v.toLocaleString('en-US', { maximumFractionDigits: 0 });
 const n1 = (v: number) => v.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -212,11 +219,37 @@ export class ExportService {
       w.paragraph(s.note, { muted: true });
     }
 
+    if (sections.has('checks')) this.checks(w, inst, materials, rules);
+
     if (doc.getPageCount() === 0) w.startSection('Electrical installation');
     w.finish(`${project.organization.name} · ${project.name} · ${date}`);
     const bytes = await doc.save();
     const slug = project.name.normalize('NFKD').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-').toLowerCase() || 'project';
     return { bytes, fileName: `${slug}-electrical.pdf` };
+  }
+
+  /** One floor as DXF, or every floor in a ZIP. Reading only: works while read-only too. */
+  async exportDxf(organizationId: string, projectId: string, floorId: string | null): Promise<{ bytes: Buffer; fileName: string; contentType: string }> {
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, organizationId },
+      select: { name: true, organization: { select: { name: true } } },
+    });
+    if (!project) throw new NotFoundException('Project not found.');
+    const inst = await this.installation.get(organizationId, projectId);
+    const render = (f: InstallationDto['floors'][number]) =>
+      Buffer.from(floorToDxf({ floor: f, projectName: project.name, companyName: project.organization.name }), 'utf8');
+    if (floorId) {
+      const floor = inst.floors.find((f) => f.floorId === floorId);
+      if (!floor) throw new NotFoundException('Floor not found.');
+      return { bytes: render(floor), fileName: dxfFileName(floor.name), contentType: 'application/dxf' };
+    }
+    if (!inst.floors.length) throw new NotFoundException('The project has no floors.');
+    const slug = project.name.normalize('NFKD').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-').toLowerCase() || 'project';
+    return {
+      bytes: zip(inst.floors.map((f, i) => ({ name: `${String(i + 1).padStart(2, '0')}-${dxfFileName(f.name)}`, data: render(f) }))),
+      fileName: `${slug}-dxf.zip`,
+      contentType: 'application/zip',
+    };
   }
 
   // ── sections ──
@@ -400,6 +433,34 @@ export class ExportService {
         n1(l.lengthM),
         l.circuitId ? (circuit.get(l.circuitId) ?? '') : '—',
       ]),
+    );
+  }
+
+  private checks(w: ReportWriter, inst: InstallationDto, materials: MaterialDto[], rules: MaterialRuleDto[]): void {
+    const { open, summary } = applyIgnored(runChecks(inst, { materials, rules }), inst.ignoredIssues);
+    w.startSection(EXPORT_SECTION_NAMES.checks);
+    w.paragraph(
+      `${summary.error} error(s), ${summary.warning} warning(s), ${summary.info} note(s)` +
+        (summary.ignored ? `; ${summary.ignored} issue(s) marked as ignored are not listed.` : '.') +
+        ' Checks are planning aids based on the drawings and the limits in the rules profile, not a certification.',
+      { muted: true, size: 8.5 },
+    );
+    if (!open.length) return w.paragraph('No open issues.');
+    const floorName = new Map(inst.floors.map((f) => [f.floorId, f.name]));
+    w.table(
+      [
+        { label: 'Severity', width: 11 },
+        { label: 'Check', width: 24 },
+        { label: 'Where', width: 15 },
+        { label: 'Issue', width: 50 },
+      ],
+      open.map((i) => [
+        i.severity === 'error' ? 'Error' : i.severity === 'warning' ? 'Warning' : 'Info',
+        CHECKS[i.code],
+        i.floorId ? (floorName.get(i.floorId) ?? '') : 'Project',
+        i.message,
+      ]),
+      { boldRows: new Set(open.map((i, n) => (i.severity === 'error' ? n : -1)).filter((n) => n >= 0)) },
     );
   }
 

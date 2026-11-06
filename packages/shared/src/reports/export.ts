@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { LAYER_KEYS } from '../catalog/types.js';
 
-export const EXPORT_SECTIONS = ['cover', 'floors', 'legend', 'circuits', 'boards', 'links', 'bom', 'costs'] as const;
+export const EXPORT_SECTIONS = ['cover', 'floors', 'legend', 'circuits', 'boards', 'links', 'bom', 'costs', 'checks'] as const;
 export type ExportSection = (typeof EXPORT_SECTIONS)[number];
 
 export const EXPORT_SECTION_NAMES: Record<ExportSection, string> = {
@@ -13,6 +13,7 @@ export const EXPORT_SECTION_NAMES: Record<ExportSection, string> = {
   links: 'Floor connections',
   bom: 'Bill of materials',
   costs: 'Cost report',
+  checks: 'Checks (open issues)',
 };
 
 /** ISO 216 sheet sizes in millimetres (portrait). "plan" = the size of each floor's own plan page. */
@@ -40,7 +41,8 @@ export const exportOptionsSchema = z.object({
 export type ExportOptions = z.infer<typeof exportOptionsSchema>;
 
 export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
-  sections: [...EXPORT_SECTIONS],
+  // Checks are internal: off by default, since the PDF often goes to the client.
+  sections: EXPORT_SECTIONS.filter((s) => s !== 'checks'),
   floorIds: [],
   hiddenLayers: [],
   paper: 'A3',

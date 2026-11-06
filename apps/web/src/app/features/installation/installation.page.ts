@@ -1,7 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, linkedSignal, signal } from '@angular/core';
 import { httpResource } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
-import { boardSchedules, circuitLoads, installationTotals, type InstallationDto, type ProjectDto } from '@electro/shared';
+import { applyIgnored, boardSchedules, circuitLoads, installationTotals, runChecks, type InstallationDto, type ProjectDto } from '@electro/shared';
 import { errorMessage } from '../../core/api-error';
 import { ErrorState, LoadingState } from '../../shared/ui/states';
 import { BoardsView } from './boards-view';
@@ -11,14 +11,15 @@ import { ProfileForm } from './profile-form';
 import { TotalsView } from './totals-view';
 import { MaterialsView } from './materials-view';
 import { ExportDialog } from './export-dialog';
+import { ChecksView } from './checks-view';
 import { Modal } from '../../shared/ui/modal';
 
-type Tab = 'circuits' | 'boards' | 'links' | 'totals' | 'materials' | 'rules';
+type Tab = 'circuits' | 'boards' | 'links' | 'totals' | 'materials' | 'checks' | 'rules';
 
 /** Electrical management of a whole project: circuits, boards, floor connections, calculations. */
 @Component({
   selector: 'app-installation-page',
-  imports: [RouterLink, LoadingState, ErrorState, CircuitsTable, BoardsView, LinksView, TotalsView, MaterialsView, ProfileForm, ExportDialog, Modal],
+  imports: [RouterLink, LoadingState, ErrorState, CircuitsTable, BoardsView, LinksView, TotalsView, MaterialsView, ProfileForm, ExportDialog, Modal, ChecksView],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="page wide">
@@ -39,7 +40,8 @@ type Tab = 'circuits' | 'boards' | 'links' | 'totals' | 'materials' | 'rules';
 
       <div class="tabs" role="tablist">
         @for (t of tabs; track t.id) {
-          <button type="button" role="tab" [class.active]="tab() === t.id" (click)="tab.set(t.id)">{{ t.label }}</button>
+          <button type="button" role="tab" [class.active]="tab() === t.id" (click)="tab.set(t.id)">{{ t.label }}
+            @if (t.id === 'checks' && checkCount(); as n) { <span class="count" [class.err]="checkErrors() > 0">{{ n }}</span> }</button>
         }
       </div>
 
@@ -55,6 +57,7 @@ type Tab = 'circuits' | 'boards' | 'links' | 'totals' | 'materials' | 'rules';
           @case ('links') { <app-links-view [installation]="inst" (changed)="data.reload()" /> }
           @case ('totals') { <app-totals-view [installation]="inst" [totals]="totals()" [loads]="loads()" /> }
           @case ('materials') { <app-materials-view [installation]="inst" (changed)="data.reload()" /> }
+          @case ('checks') { <app-checks-view [installation]="inst" (changed)="data.reload()" /> }
           @case ('rules') { <app-profile-form [projectId]="projectId()" [profile]="inst.profile" (changed)="data.reload()" /> }
         }
       }
@@ -67,22 +70,38 @@ type Tab = 'circuits' | 'boards' | 'links' | 'totals' | 'materials' | 'rules';
     .tabs button { padding: 8px 14px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--text-muted);
                    font: 600 13px var(--font); cursor: pointer; }
     .tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tabs { overflow-x: auto; }
+    .tabs button { white-space: nowrap; }
+    .count { margin-left: 6px; padding: 1px 7px; border-radius: 999px; font-size: 11px; background: var(--warn-soft); color: var(--warn); }
+    .count.err { background: rgba(240, 106, 106, 0.16); color: #ff8a8a; }
   `,
 })
 export class InstallationPage {
   readonly projectId = input.required<string>();
   protected readonly project = httpResource<ProjectDto>(() => `/api/projects/${this.projectId()}`);
   protected readonly data = httpResource<InstallationDto>(() => `/api/projects/${this.projectId()}/installation`);
-  protected readonly tab = signal<Tab>('circuits');
-  protected readonly exporting = signal(false);
+  /** `?tab=` query parameter (bound by the router), e.g. links to the Checks tab. */
+  readonly initialTab = input<string | undefined>(undefined, { alias: 'tab' });
   protected readonly tabs: { id: Tab; label: string }[] = [
     { id: 'circuits', label: 'Circuits' },
     { id: 'boards', label: 'Distribution boards' },
     { id: 'links', label: 'Floor connections' },
     { id: 'totals', label: 'Calculations' },
     { id: 'materials', label: 'Materials & costs' },
+    { id: 'checks', label: 'Checks' },
     { id: 'rules', label: 'Rules profile' },
   ];
+  protected readonly tab = linkedSignal<Tab>(() => {
+    const t = this.initialTab();
+    return this.tabs.some((x) => x.id === t) ? (t as Tab) : 'circuits';
+  });
+  protected readonly exporting = signal(false);
+  /** Open errors + warnings (price checks excluded here; they are info only). */
+  private readonly checkSummary = computed(() =>
+    this.data.hasValue() ? applyIgnored(runChecks(this.data.value()), this.data.value().ignoredIssues).summary : null,
+  );
+  protected readonly checkErrors = computed(() => this.checkSummary()?.error ?? 0);
+  protected readonly checkCount = computed(() => (this.checkSummary() ? this.checkSummary()!.error + this.checkSummary()!.warning : 0));
   protected message = errorMessage;
 
   protected readonly loads = computed(() => (this.data.hasValue() ? circuitLoads(this.data.value()) : []));

@@ -4,6 +4,8 @@ import {
   calibrationSchema,
   electricalProfileSchema,
   readProjectCostSettings,
+  ISSUE_ID,
+  type IgnoredIssue,
   type FloorHeightsInput,
   type ProjectCostSettings,
   type CableDto,
@@ -15,6 +17,9 @@ import {
   type InstallationDto,
 } from '@electro/shared';
 import { PrismaService } from '../prisma/prisma.service.js';
+import type { AuthContext } from '../auth/auth-context.js';
+
+const MAX_IGNORED = 500;
 import type { Circuit, FloorLink } from '../generated/prisma/client.js';
 import { Prisma } from '../generated/prisma/client.js';
 import { toComponentDto, toWireDto } from '../drawing/drawing.service.js';
@@ -84,6 +89,8 @@ export class InstallationService {
           name: f.name,
           sortOrder: f.sortOrder,
           metresPerUnit: cal?.success ? cal.data.metresPerUnit : null,
+          calibrationNeedsCheck: f.calibrationNeedsCheck,
+          hasPlan: f.planFileId !== null,
           ceilingHeightMm: f.ceilingHeightMm,
           cableRouting: f.cableRouting === 'floor' ? 'floor' : 'ceiling',
           components: f.components.map(toComponentDto),
@@ -94,7 +101,40 @@ export class InstallationService {
       links: project.floorLinks.map(toLinkDto),
       profile: this.profileOf(project.settings),
       costSettings: readProjectCostSettings((project.settings as Record<string, unknown> | null)?.['costSettings']),
+      ignoredIssues: this.ignoredOf(project.settings),
     };
+  }
+
+  // ── ignored validation issues ──
+
+  /** Hides one validation issue for this project (any member). Idempotent. */
+  async ignoreIssue(auth: AuthContext, projectId: string, issueId: string): Promise<IgnoredIssue[]> {
+    const project = await this.prisma.project.findFirst({ where: { id: projectId, organizationId: auth.organizationId } });
+    if (!project) throw new NotFoundException('Project not found.');
+    const list = this.ignoredOf(project.settings);
+    if (list.some((i) => i.id === issueId)) return list;
+    if (list.length >= MAX_IGNORED) throw new BadRequestException(`At most ${MAX_IGNORED} issues can be ignored per project.`);
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: auth.userId }, select: { name: true } });
+    return this.saveIgnored(project.id, project.settings, [...list, { id: issueId, ignoredBy: user.name, ignoredAt: new Date().toISOString() }]);
+  }
+
+  async restoreIssue(auth: AuthContext, projectId: string, issueId: string): Promise<IgnoredIssue[]> {
+    const project = await this.prisma.project.findFirst({ where: { id: projectId, organizationId: auth.organizationId } });
+    if (!project) throw new NotFoundException('Project not found.');
+    return this.saveIgnored(project.id, project.settings, this.ignoredOf(project.settings).filter((i) => i.id !== issueId));
+  }
+
+  private ignoredOf(settings: unknown): IgnoredIssue[] {
+    const raw = (settings as Record<string, unknown> | null)?.['ignoredIssues'];
+    return Array.isArray(raw)
+      ? raw.filter((i): i is IgnoredIssue => !!i && typeof i.id === 'string' && ISSUE_ID.test(i.id) && typeof i.ignoredAt === 'string')
+      : [];
+  }
+
+  private async saveIgnored(projectId: string, settings: unknown, list: IgnoredIssue[]): Promise<IgnoredIssue[]> {
+    const next = { ...((settings as Record<string, unknown>) ?? {}), ignoredIssues: list };
+    await this.prisma.project.update({ where: { id: projectId }, data: { settings: next as unknown as Prisma.InputJsonValue } });
+    return list;
   }
 
   // ── cost settings and floor heights (bill of materials) ──

@@ -83,6 +83,8 @@ function sample(): { inst: InstallationDto; board: ComponentDto; outlet: Compone
         metresPerUnit: 0.01,
         ceilingHeightMm: 2600,
         cableRouting: 'ceiling',
+        calibrationNeedsCheck: false,
+        hasPlan: true,
         components: [board, outlet, light, note],
         wires: [wire(board, outlet, DEFAULT_CABLE, circuitId), wire(outlet, light, DEFAULT_CABLE, circuitId)],
       },
@@ -93,6 +95,8 @@ function sample(): { inst: InstallationDto; board: ComponentDto; outlet: Compone
         metresPerUnit: null,
         ceilingHeightMm: 2600,
         cableRouting: 'ceiling',
+        calibrationNeedsCheck: false,
+        hasPlan: true,
         components: [up1, up2],
         wires: [wire(up1, up2)],
       },
@@ -112,6 +116,7 @@ function sample(): { inst: InstallationDto; board: ComponentDto; outlet: Compone
     ],
     profile: EMPTY_PROFILE,
     costSettings: EMPTY_COST_SETTINGS,
+    ignoredIssues: [],
   };
   return { inst, board, outlet, light, circuitId };
 }

@@ -5,6 +5,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
+import type { Test as SuperTest } from 'supertest';
 import type { ClientDto, FloorDto, ProjectDto } from '@electro/shared';
 import { makePdf } from './pdf-fixture.js';
 import * as shared from '@electro/shared';
@@ -445,7 +446,8 @@ describe('circuits, boards and floor connections', () => {
     const profile = { name: 'My rules', maxBreakerByCrossSection: { '1.5': 16, '2.5': 20 }, powerFactor: 0.95 };
     await agent.put(`/api/projects/${project.id}/electrical-profile`).send(profile).expect(200);
     await agent.put(`/api/projects/${project.id}/electrical-profile`).send({ ...profile, powerFactor: 3 }).expect(400);
-    expect((await agent.get(`/api/projects/${project.id}/installation`)).body.profile).toEqual(profile);
+    // Profiles saved without the Phase 6 fields get their defaults.
+    expect((await agent.get(`/api/projects/${project.id}/installation`)).body.profile).toEqual({ ...profile, maxVoltageDropPct: null, rcdRequiredCategories: [] });
   });
 });
 
@@ -742,5 +744,90 @@ describe('billing and read-only mode', () => {
     await a.agent.post('/api/billing/checkout').send({ interval: 'year' }).expect(400);
     expect((await a.agent.post('/api/billing/portal').expect(200)).body.url).toContain('dev-portal=1');
     await b.agent.post('/api/billing/portal').expect(400);
+  });
+});
+
+describe('validation checks and DXF export', () => {
+  const { createComponent, uuidv7, DEFAULT_CIRCUIT, DEFAULT_EXPORT_OPTIONS, runChecks, applyIgnored } = shared;
+  const binary = (r: SuperTest) =>
+    r.buffer(true).parse((res, cb) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (c: Buffer) => chunks.push(c));
+      res.on('end', () => cb(null, Buffer.concat(chunks)));
+    });
+
+  async function setup(company: string) {
+    const { agent } = await signUp(company);
+    const client = (await agent.post('/api/clients').send({ name: 'C' })).body;
+    const project = (await agent.post('/api/projects').send({ clientId: client.id, name: 'Checks P' })).body;
+    const floor = (await agent.post(`/api/projects/${project.id}/floors`).send({ name: 'Ground floor' })).body as FloorDto;
+    const board = { ...createComponent('board.main', { x: 0, y: 0 }, uuidv7(), []), label: 'MDB' };
+    const lonely = { ...createComponent('outlet.double', { x: 300, y: 0 }, uuidv7(), []), label: 'S1' };
+    await agent.patch(`/api/floors/${floor.id}/drawing`).send({ baseRevision: 0, ops: [{ op: 'upsert', component: board }, { op: 'upsert', component: lonely }] }).expect(200);
+    return { agent, project, floor, board, lonely };
+  }
+
+  it('stores the new rules (voltage drop, RCD categories) and ignores / restores issues', async () => {
+    const { agent, project, lonely } = await setup('Checks Co');
+    const profile = { name: '', maxBreakerByCrossSection: {}, powerFactor: 1, maxVoltageDropPct: 3, rcdRequiredCategories: ['Sockets'] };
+    await agent.put(`/api/projects/${project.id}/electrical-profile`).send(profile).expect(200);
+    await agent.put(`/api/projects/${project.id}/electrical-profile`).send({ ...profile, rcdRequiredCategories: ['Garden gnomes'] }).expect(400);
+    await agent.post(`/api/projects/${project.id}/circuits`).send({ ...DEFAULT_CIRCUIT, category: 'Sockets', rcdGroup: null }).expect(201);
+
+    let inst = (await agent.get(`/api/projects/${project.id}/installation`)).body as shared.InstallationDto;
+    expect(inst.profile).toMatchObject({ maxVoltageDropPct: 3, rcdRequiredCategories: ['Sockets'] });
+    const issues = runChecks(inst);
+    expect(issues.map((i) => i.code)).toEqual(expect.arrayContaining(['D1', 'C1', 'C5', 'C9']));
+    const d1 = issues.find((i) => i.code === 'D1' && i.componentIds[0] === lonely.id)!;
+
+    await agent.post(`/api/projects/${project.id}/ignored-issues`).send({ issueId: d1.id }).expect(200);
+    await agent.post(`/api/projects/${project.id}/ignored-issues`).send({ issueId: d1.id }).expect(200); // idempotent
+    await agent.post(`/api/projects/${project.id}/ignored-issues`).send({ issueId: 'not an id' }).expect(400);
+    inst = (await agent.get(`/api/projects/${project.id}/installation`)).body;
+    expect(inst.ignoredIssues).toEqual([{ id: d1.id, ignoredBy: 'Test Electrician', ignoredAt: expect.any(String) }]);
+    expect(applyIgnored(runChecks(inst), inst.ignoredIssues).open.map((i) => i.id)).not.toContain(d1.id);
+
+    await agent.post(`/api/projects/${project.id}/ignored-issues/restore`).send({ issueId: d1.id }).expect(200);
+    expect((await agent.get(`/api/projects/${project.id}/installation`)).body.ignoredIssues).toEqual([]);
+
+    const other = await signUp('Checks Other Co');
+    await other.agent.post(`/api/projects/${project.id}/ignored-issues`).send({ issueId: d1.id }).expect(404);
+  });
+
+  it('adds a Checks section to the PDF when asked', async () => {
+    const { agent, project } = await setup('Checks PDF Co');
+    const res = await binary(agent.post(`/api/projects/${project.id}/exports`).send({ ...DEFAULT_EXPORT_OPTIONS, sections: ['checks'] })).expect(200);
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const doc = await pdfjs.getDocument({ data: new Uint8Array(res.body as Buffer), verbosity: 0 }).promise;
+    const text = (await (await doc.getPage(1)).getTextContent()).items.map((i) => ('str' in i ? i.str : '')).join(' ');
+    expect(text).toContain('Checks (open issues)');
+    expect(text).toContain('Component without a wire');
+    expect(DEFAULT_EXPORT_OPTIONS.sections).not.toContain('checks');
+  });
+
+  it('exports one floor as DXF or all floors as a ZIP, also while read-only, never for other companies', async () => {
+    const { agent, project, floor } = await setup('DXF Co');
+    await agent.post(`/api/projects/${project.id}/floors`).send({ name: 'Kati i parë' }).expect(201);
+    const one = await binary(agent.get(`/api/projects/${project.id}/dxf?floorId=${floor.id}`)).expect(200);
+    expect(one.headers['content-type']).toContain('application/dxf');
+    expect(one.headers['content-disposition']).toContain('ground-floor.dxf');
+    const text = (one.body as Buffer).toString('utf8');
+    expect(text).toContain('AC1009');
+    expect(text.match(/\r\nINSERT\r\n/g)).toHaveLength(2);
+
+    const all = await binary(agent.get(`/api/projects/${project.id}/dxf`)).expect(200);
+    expect(all.headers['content-type']).toContain('application/zip');
+    const z = all.body as Buffer;
+    expect(z.readUInt16LE(z.length - 12)).toBe(2);
+    expect(z.toString('latin1')).toContain('02-kati-i-pare.dxf');
+
+    const db = (await import('../src/prisma/prisma.service.js')).PrismaService;
+    const orgId = (await agent.get('/api/auth/me')).body.organization.id;
+    await app.get(db).organization.update({ where: { id: orgId }, data: { trialEndsAt: new Date(Date.now() - 1000) } });
+    await binary(agent.get(`/api/projects/${project.id}/dxf?floorId=${floor.id}`)).expect(200);
+
+    const other = await signUp('DXF Other Co');
+    await other.agent.get(`/api/projects/${project.id}/dxf`).expect(404);
+    await agent.get(`/api/projects/${project.id}/dxf?floorId=not-a-uuid`).expect(400);
   });
 });

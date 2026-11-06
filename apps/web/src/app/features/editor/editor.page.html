@@ -107,10 +107,13 @@
       <button type="button" role="tab" [class.active]="leftTab() === 'library'" (click)="leftTab.set('library')">Components</button>
       <button type="button" role="tab" [class.active]="leftTab() === 'circuits'" (click)="leftTab.set('circuits')">Circuits</button>
       <button type="button" role="tab" [class.active]="leftTab() === 'layers'" (click)="leftTab.set('layers')">Layers</button>
+      <button type="button" role="tab" [class.active]="leftTab() === 'checks'" (click)="leftTab.set('checks')">Checks
+        @if (floorIssues().length) { <span class="count" [class.err]="floorErrors() > 0">{{ floorIssues().length }}</span> }</button>
     </div>
     @switch (leftTab()) {
       @case ('library') { <app-library-panel /> }
       @case ('circuits') { <app-circuits-panel [projectId]="projectId()" /> }
+      @case ('checks') { <app-checks-panel [issues]="floorIssues()" [ignored]="ignoredCount()" [projectId]="projectId()" (focus)="focusIssue($event)" /> }
       @default { <app-layers-panel /> }
     }
   </aside>

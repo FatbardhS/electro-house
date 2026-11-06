@@ -9,6 +9,7 @@ import type {
   ElectricalProfile,
   ExportOptions,
   FloorHeightsInput,
+  IgnoredIssue,
   MaterialDto,
   MaterialInput,
   MaterialRuleDto,
@@ -110,6 +111,17 @@ export class Api {
   }
   setCostSettings(projectId: string, settings: ProjectCostSettings) {
     return firstValueFrom(this.http.put<ProjectCostSettings>(`/api/projects/${projectId}/cost-settings`, settings));
+  }
+  ignoreIssue(projectId: string, issueId: string) {
+    return firstValueFrom(this.http.post<IgnoredIssue[]>(`/api/projects/${projectId}/ignored-issues`, { issueId }));
+  }
+  restoreIssue(projectId: string, issueId: string) {
+    return firstValueFrom(this.http.post<IgnoredIssue[]>(`/api/projects/${projectId}/ignored-issues/restore`, { issueId }));
+  }
+  /** One DXF file per floor (or a ZIP of all floors when `floorId` is omitted). */
+  exportDxf(projectId: string, floorId?: string) {
+    const q = floorId ? `?floorId=${encodeURIComponent(floorId)}` : '';
+    return firstValueFrom(this.http.get(`/api/projects/${projectId}/dxf${q}`, { responseType: 'blob' }));
   }
   setFloorHeights(floorId: string, input: FloorHeightsInput) {
     return firstValueFrom(this.http.put<FloorHeightsInput>(`/api/floors/${floorId}/heights`, input));

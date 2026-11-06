@@ -44,13 +44,14 @@ function sample(): InstallationDto {
   return {
     projectId: 'p',
     floors: [
-      { floorId: 'g', name: 'Ground floor', sortOrder: 0, metresPerUnit: 0.01, ceilingHeightMm: 2600, cableRouting: 'ceiling', components: [board, l1, l2, sw, oven], wires: [wire(board, l1, lighting.id), wire(l1, l2, lighting.id), wire(board, oven, kitchen.id, { ...DEFAULT_CABLE, conductors: 5, crossSectionMm2: 2.5 })] },
-      { floorId: 'f', name: 'First floor', sortOrder: 1, metresPerUnit: null, ceilingHeightMm: 2600, cableRouting: 'ceiling', components: [upstairsLamp], wires: [wire(upstairsLamp, upstairsLamp, null)] },
+      { floorId: 'g', name: 'Ground floor', sortOrder: 0, metresPerUnit: 0.01, calibrationNeedsCheck: false, hasPlan: true, ceilingHeightMm: 2600, cableRouting: 'ceiling', components: [board, l1, l2, sw, oven], wires: [wire(board, l1, lighting.id), wire(l1, l2, lighting.id), wire(board, oven, kitchen.id, { ...DEFAULT_CABLE, conductors: 5, crossSectionMm2: 2.5 })] },
+      { floorId: 'f', name: 'First floor', sortOrder: 1, metresPerUnit: null, calibrationNeedsCheck: false, hasPlan: true, ceilingHeightMm: 2600, cableRouting: 'ceiling', components: [upstairsLamp], wires: [wire(upstairsLamp, upstairsLamp, null)] },
     ],
     circuits: [lighting, kitchen, unassigned],
     links: [{ id: uuidv7(), projectId: 'p', fromComponentId: board.id, toComponentId: upstairsLamp.id, lengthM: 4.5, cable: { ...DEFAULT_CABLE }, circuitId: lighting.id, description: null }],
     profile: { ...EMPTY_PROFILE, maxBreakerByCrossSection: { '1.5': 16, '2.5': 20 } },
     costSettings: EMPTY_COST_SETTINGS,
+    ignoredIssues: [],
   };
 }
 

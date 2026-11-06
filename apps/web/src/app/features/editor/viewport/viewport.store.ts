@@ -94,6 +94,20 @@ export class ViewportStore {
     if (v) this.commit(panBy(v, delta));
   }
 
+  /** Centres the view on plan points and zooms so they take about half of the workspace (never zooming out far). */
+  focusOn(points: readonly Vec2[]): void {
+    const v = this.state();
+    if (!v || points.length === 0) return;
+    const xs = points.map((p) => p.x);
+    const ys = points.map((p) => p.y);
+    const center = { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 };
+    const extent = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), 60);
+    const s = this.size();
+    const zoom = clampZoom(Math.min(s.width, s.height) * 0.5 / extent);
+    const r = planToScreen({ ...v, zoom: 1, pan: { x: 0, y: 0 } }, center);
+    this.commit({ ...v, zoom, pan: { x: s.width / 2 - zoom * r.x, y: s.height / 2 - zoom * r.y } });
+  }
+
   fit(): void {
     const v = this.state();
     if (v) this.commit(fitToViewport(v, this.size()));

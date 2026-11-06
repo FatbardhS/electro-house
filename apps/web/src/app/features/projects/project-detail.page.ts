@@ -1,8 +1,8 @@
-import { ChangeDetectionStrategy, Component, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import { Router, RouterLink } from '@angular/router';
-import type { ProjectDto } from '@electro/shared';
+import { applyIgnored, runChecks, type InstallationDto, type ProjectDto } from '@electro/shared';
 import { Api } from '../../core/api';
 import { errorMessage, toApiError } from '../../core/api-error';
 import { ConfirmService } from '../../shared/ui/confirm-dialog';
@@ -34,6 +34,11 @@ import { STATUS_LABELS } from './status';
             </div>
           </div>
           <div style="display: flex; gap: 8px">
+            @if (checks(); as s) {
+              <a class="checks" [class.ok]="!s.error && !s.warning" [class.err]="s.error > 0" [routerLink]="['/projects', p.id, 'installation']"
+                 [queryParams]="{ tab: 'checks' }" title="Open the checks">
+                {{ s.error || s.warning ? s.error + ' error' + (s.error === 1 ? '' : 's') + ' · ' + s.warning + ' warning' + (s.warning === 1 ? '' : 's') : 'No problems found' }}</a>
+            }
             <a class="btn btn-primary" [routerLink]="['/projects', p.id, 'installation']">Circuits & calculations</a>
             <button class="btn" type="button" (click)="editing.set(true)">Edit</button>
             <button class="btn btn-danger" type="button" (click)="remove(p)">Delete</button>
@@ -63,6 +68,10 @@ import { STATUS_LABELS } from './status';
     h1 .badge { vertical-align: middle; margin-left: 8px; }
     .desc { padding: 14px 16px; white-space: pre-line; color: var(--text-muted); margin-bottom: 8px; }
     .section-head { display: flex; align-items: baseline; gap: 12px; margin: 24px 0 12px; }
+    .checks { align-self: center; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+              background: var(--warn-soft); color: var(--warn); white-space: nowrap; }
+    .checks.err { background: rgba(240, 106, 106, 0.16); color: #ff8a8a; }
+    .checks.ok { background: var(--accent-soft); color: var(--accent); }
   `,
 })
 export class ProjectDetailPage {
@@ -72,6 +81,13 @@ export class ProjectDetailPage {
 
   readonly projectId = input.required<string>();
   protected readonly project = httpResource<ProjectDto>(() => `/api/projects/${this.projectId()}`);
+  private readonly installation = httpResource<InstallationDto>(() => `/api/projects/${this.projectId()}/installation`);
+  /** Open errors and warnings of the validation checks. */
+  protected readonly checks = computed(() => {
+    if (!this.installation.hasValue()) return null;
+    const inst = this.installation.value();
+    return applyIgnored(runChecks(inst), inst.ignoredIssues).summary;
+  });
   protected readonly editing = signal(false);
   protected readonly actionError = signal<string | null>(null);
   protected readonly labels = STATUS_LABELS;

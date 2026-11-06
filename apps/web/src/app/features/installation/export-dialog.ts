@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import {
   DEFAULT_EXPORT_OPTIONS,
   EXPORT_SECTIONS,
@@ -6,6 +6,8 @@ import {
   LAYER_KEYS,
   LAYER_NAMES,
   PAPER_OPTIONS,
+  applyIgnored,
+  runChecks,
   exportOptionsSchema,
   type ExportOptions,
   type ExportSection,
@@ -62,6 +64,21 @@ const STORAGE_KEY = 'eh.export-options';
           Schedules and reports use A4.</p>
       </fieldset>
     </div>
+    <fieldset class="dxf">
+      <legend>CAD drawing (DXF)</legend>
+      <div class="dxf-row">
+        <select class="input" (change)="dxfFloor.set(val($event))" aria-label="Floor for DXF">
+          <option value="" [selected]="!dxfFloor()">All floors (ZIP, one DXF per floor)</option>
+          @for (f of installation().floors; track f.floorId) { <option [value]="f.floorId" [selected]="f.floorId === dxfFloor()">{{ f.name }}</option> }
+        </select>
+        <button class="btn" type="button" (click)="downloadDxf()" [disabled]="busy() || installation().floors.length === 0">Download DXF</button>
+      </div>
+      <p class="faint small">Symbols as blocks, wires as polylines, one CAD layer per app layer; in metres when the floor has a scale.
+        The architect's plan is not included: overlay it on their own CAD drawing.</p>
+    </fieldset>
+    @if (checkErrors(); as n) {
+      <div class="banner banner-warn">⚠ The checks found {{ n }} error(s) in this project (see the Checks tab). You can still export.</div>
+    }
     @if (error(); as e) { <div class="banner banner-error" role="alert">{{ e }}</div> }
     <div class="actions">
       <button class="btn" type="button" (click)="closed.emit()">Cancel</button>
@@ -79,6 +96,9 @@ const STORAGE_KEY = 'eh.export-options';
     .small { font-size: 12px; }
     .banner { margin-top: 12px; }
     .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+    .dxf { margin-top: 16px; }
+    .dxf-row { display: flex; gap: 8px; margin: 4px 0 6px; }
+    .dxf-row select { flex: 1; min-width: 0; }
   `,
 })
 export class ExportDialog {
@@ -93,6 +113,9 @@ export class ExportDialog {
   protected readonly layerNames = LAYER_NAMES;
   protected readonly papers = PAPER_OPTIONS;
   protected readonly options = signal<ExportOptions>(this.restore());
+  protected readonly checkErrors = computed(
+    () => applyIgnored(runChecks(this.installation()), this.installation().ignoredIssues).summary.error,
+  );
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
 
@@ -170,20 +193,41 @@ export class ExportDialog {
       } catch {
         /* storage unavailable: options are simply not remembered */
       }
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${this.slug(this.projectName())}-electrical.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      this.save(blob, `${this.slug(this.projectName())}-electrical.pdf`);
       this.closed.emit();
     } catch (err) {
       this.error.set(await this.blobError(err));
     } finally {
       this.busy.set(false);
     }
+  }
+
+  protected readonly dxfFloor = signal('');
+
+  protected async downloadDxf(): Promise<void> {
+    this.error.set(null);
+    this.busy.set(true);
+    try {
+      const floorId = this.dxfFloor() || undefined;
+      const blob = await this.api.exportDxf(this.installation().projectId, floorId);
+      const floor = this.installation().floors.find((f) => f.floorId === floorId);
+      this.save(blob, floor ? `${this.slug(floor.name)}.dxf` : `${this.slug(this.projectName())}-dxf.zip`);
+    } catch (err) {
+      this.error.set(await this.blobError(err));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  private save(blob: Blob, fileName: string): void {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 
   private slug(name: string): string {

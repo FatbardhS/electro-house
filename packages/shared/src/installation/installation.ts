@@ -122,15 +122,38 @@ export interface ElectricalProfile {
   maxBreakerByCrossSection: Record<string, number>;
   /** Default power factor used to estimate current from W (1 = resistive). */
   powerFactor: number;
+  /** Maximum estimated voltage drop in % at the farthest point of a circuit; null = not checked. */
+  maxVoltageDropPct: number | null;
+  /** Circuit categories that must be protected by an RCD (have an RCD group); empty = not checked. */
+  rcdRequiredCategories: string[];
 }
 
 export const electricalProfileSchema = z.object({
   name: z.string().trim().max(80),
   maxBreakerByCrossSection: z.record(z.string().regex(/^\d+(\.\d+)?$/), z.number().positive().max(4000)),
   powerFactor: z.number().min(0.1).max(1),
+  // Defaults keep profiles saved before Phase 6 valid.
+  maxVoltageDropPct: z.number().positive().max(50).nullable().default(null),
+  rcdRequiredCategories: z.array(z.enum(CIRCUIT_CATEGORIES)).max(CIRCUIT_CATEGORIES.length).default([]),
 });
 
-export const EMPTY_PROFILE: ElectricalProfile = { name: '', maxBreakerByCrossSection: {}, powerFactor: 1 };
+export const EMPTY_PROFILE: ElectricalProfile = {
+  name: '',
+  maxBreakerByCrossSection: {},
+  powerFactor: 1,
+  maxVoltageDropPct: null,
+  rcdRequiredCategories: [],
+};
+
+/** An issue the user chose to hide (see validation checks). */
+export interface IgnoredIssue {
+  id: string;
+  ignoredBy: string;
+  ignoredAt: string;
+}
+
+export const ISSUE_ID = /^[A-Z]\d{1,2}:[A-Za-z0-9:._|-]{1,1500}$/;
+export const ignoreIssueSchema = z.object({ issueId: z.string().regex(ISSUE_ID, 'Invalid issue id.') });
 
 // ── Whole-project data used for calculations and reports ───────────────
 
@@ -140,6 +163,9 @@ export interface FloorInstallationDto {
   sortOrder: number;
   /** null when the floor is not calibrated: its wire lengths cannot be measured. */
   metresPerUnit: number | null;
+  /** True when the calibration should be checked again (the plan PDF or page changed). */
+  calibrationNeedsCheck: boolean;
+  hasPlan: boolean;
   /** Floor-to-ceiling height, used for vertical cable drops to components. */
   ceilingHeightMm: number;
   /** Where cables run on this floor: drops go down from the ceiling or up from the floor. */
@@ -155,6 +181,7 @@ export interface InstallationDto {
   links: FloorLinkDto[];
   profile: ElectricalProfile;
   costSettings: ProjectCostSettings;
+  ignoredIssues: IgnoredIssue[];
 }
 
 export const CABLE_ROUTINGS = ['ceiling', 'floor'] as const;
