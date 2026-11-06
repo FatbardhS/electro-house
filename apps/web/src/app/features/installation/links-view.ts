@@ -16,6 +16,8 @@ import { toApiError } from '../../core/api-error';
 import { ConfirmService } from '../../shared/ui/confirm-dialog';
 import { EmptyState } from '../../shared/ui/states';
 import { componentName, componentOptions } from './installation-helpers';
+import { I18N_PIPES } from '../../core/i18n/t.pipe';
+import { t, tx } from '../../core/i18n/i18n.service';
 
 interface Draft {
   fromComponentId: string;
@@ -45,66 +47,66 @@ const EMPTY_DRAFT: Draft = {
  */
 @Component({
   selector: 'app-links-view',
-  imports: [EmptyState],
+  imports: [I18N_PIPES, EmptyState],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    @if (error(); as e) { <div class="banner banner-error" role="alert">{{ e }}</div> }
+    @if (error(); as e) { <div class="banner banner-error" role="alert">{{ e | tx }}</div> }
 
     @if (installation().floors.length < 2) {
-      <div class="card"><app-empty-state heading="Only one floor"
-        text="Floor connections join components on two different floors. Add another floor to the project first." /></div>
+      <div class="card"><app-empty-state [heading]="'Only one floor' | t"
+        [text]="'Floor connections join components on two different floors. Add another floor to the project first.' | t" /></div>
     } @else {
       <form class="card add" (submit)="$event.preventDefault(); add()">
-        <h3>New floor connection</h3>
+        <h3>{{ 'New floor connection' | t }}</h3>
         <div class="grid">
-          <label class="f"><span>From</span>
+          <label class="f"><span>{{ 'From' | t }}</span>
             <select class="input" (change)="patchDraft({ fromComponentId: val($event), toComponentId: '' })">
-              <option value="" [selected]="!draft().fromComponentId">— choose a component —</option>
+              <option value="" [selected]="!draft().fromComponentId">— {{ 'choose a component' | t }} —</option>
               @for (o of options(); track o.id) { <option [value]="o.id" [selected]="o.id === draft().fromComponentId">{{ o.label }}</option> }
             </select></label>
-          <label class="f"><span>To (another floor)</span>
+          <label class="f"><span>{{ 'To (another floor)' | t }}</span>
             <select class="input" (change)="patchDraft({ toComponentId: val($event) })" [disabled]="!draft().fromComponentId">
-              <option value="" [selected]="!draft().toComponentId">— choose a component —</option>
+              <option value="" [selected]="!draft().toComponentId">— {{ 'choose a component' | t }} —</option>
               @for (o of toOptions(); track o.id) { <option [value]="o.id" [selected]="o.id === draft().toComponentId">{{ o.label }}</option> }
             </select></label>
-          <label class="f"><span>Cable length (m)</span>
+          <label class="f"><span>{{ 'Cable length (m)' | t }}</span>
             <input class="input mono" type="number" min="0.1" step="0.1" [value]="draft().lengthM" placeholder="e.g. 6.5"
                    (input)="patchDraft({ lengthM: val($event) })" /></label>
-          <label class="f"><span>Cable type</span>
+          <label class="f"><span>{{ 'Cable type' | t }}</span>
             <select class="input" (change)="patchDraft({ cableType: val($event) })">
               <option value="">—</option>
               @for (t of cableTypes; track t) { <option [value]="t" [selected]="t === draft().cableType">{{ t }}</option> }
             </select></label>
-          <label class="f"><span>Conductors</span>
+          <label class="f"><span>{{ 'Conductors' | t }}</span>
             <input class="input mono" type="number" min="1" max="61" [value]="draft().conductors" (input)="patchDraft({ conductors: val($event) })" /></label>
-          <label class="f"><span>Cross-section (mm²)</span>
+          <label class="f"><span>{{ 'Cross-section (mm²)' | t }}</span>
             <select class="input" (change)="patchDraft({ crossSectionMm2: val($event) })">
               <option value="">—</option>
               @for (s of sections; track s) { <option [value]="s" [selected]="String(s) === draft().crossSectionMm2">{{ s }}</option> }
             </select></label>
-          <label class="f"><span>Circuit</span>
+          <label class="f"><span>{{ 'Circuit' | t }}</span>
             <select class="input" (change)="patchDraft({ circuitId: val($event) })">
-              <option value="" [selected]="!draft().circuitId">— none —</option>
+              <option value="" [selected]="!draft().circuitId">— {{ 'none' | t }} —</option>
               @for (c of installation().circuits; track c.id) { <option [value]="c.id" [selected]="c.id === draft().circuitId">{{ c.number }} · {{ c.name }}</option> }
             </select></label>
-          <label class="f wide"><span>Description</span>
-            <input class="input" maxlength="2000" [value]="draft().description" placeholder="e.g. riser in stairwell shaft"
+          <label class="f wide"><span>{{ 'Description' | t }}</span>
+            <input class="input" maxlength="2000" [value]="draft().description" [placeholder]="'e.g. riser in stairwell shaft' | t"
                    (input)="patchDraft({ description: val($event) })" /></label>
         </div>
         <div class="actions">
-          <span class="faint small">Include the vertical run and the horizontal distance to the shaft on both floors.</span>
-          <button class="btn btn-primary btn-sm" type="submit" [disabled]="busy()">Add connection</button>
+          <span class="faint small">{{ 'Include the vertical run and the horizontal distance to the shaft on both floors.' | t }}</span>
+          <button class="btn btn-primary btn-sm" type="submit" [disabled]="busy()">{{ 'Add connection' | t }}</button>
         </div>
       </form>
 
       @if (installation().links.length === 0) {
-        <div class="card"><app-empty-state heading="No floor connections yet"
-          text="Add the cables that run between floors, such as the feed from the main board to a sub-board." /></div>
+        <div class="card"><app-empty-state [heading]="'No floor connections yet' | t"
+          [text]="'Add the cables that run between floors, such as the feed from the main board to a sub-board.' | t" /></div>
       } @else {
         <div class="card scroll">
           <table class="table dense">
             <thead><tr>
-              <th>From</th><th>To</th><th>Length m</th><th>Cable</th><th>Conductors</th><th>mm²</th><th>Circuit</th><th>Description</th><th></th>
+              <th>{{ 'From' | t }}</th><th>{{ 'To' | t }}</th><th>{{ 'Length m' | t }}</th><th>{{ 'Cable' | t }}</th><th>{{ 'Conductors' | t }}</th><th>mm²</th><th>{{ 'Circuit' | t }}</th><th>{{ 'Description' | t }}</th><th></th>
             </tr></thead>
             <tbody>
               @for (l of installation().links; track l.id) {
@@ -125,14 +127,13 @@ const EMPTY_DRAFT: Draft = {
                     <option value="" [selected]="!l.circuitId">—</option>
                     @for (c of installation().circuits; track c.id) { <option [value]="c.id" [selected]="c.id === l.circuitId">{{ c.number }} · {{ c.name }}</option> }</select></td>
                   <td><input class="cell w12" [value]="l.description ?? ''" (change)="save(l, { description: val($event) || null })" /></td>
-                  <td><button class="btn btn-sm btn-ghost btn-danger" type="button" (click)="remove(l)" aria-label="Delete connection">✕</button></td>
+                  <td><button class="btn btn-sm btn-ghost btn-danger" type="button" (click)="remove(l)" [attr.aria-label]="'Delete connection' | t">✕</button></td>
                 </tr>
               }
             </tbody>
           </table>
         </div>
-        <p class="faint small">Total between floors: <span class="mono">{{ totalM().toFixed(1) }} m</span>.
-          These lengths are added to the circuit cable lengths and the cable totals.</p>
+        <p class="faint small">{{ 'Total between floors' | t }}: <span class="mono">{{ totalM() | num: 1 }} m</span>. {{ 'These lengths are added to the circuit cable lengths and the cable totals.' | t }}</p>
       }
     }
   `,
@@ -210,10 +211,10 @@ export class LinksView {
       circuitId: d.circuitId || null,
       description: d.description || null,
     };
-    if (!d.fromComponentId || !d.toComponentId) return this.error.set('Choose the components at both ends.');
-    if (!(input.lengthM > 0)) return this.error.set('Enter the cable length in metres.');
+    if (!d.fromComponentId || !d.toComponentId) return this.error.set(t('Choose the components at both ends.'));
+    if (!(input.lengthM > 0)) return this.error.set(t('Enter the cable length in metres.'));
     const check = floorLinkInputSchema.safeParse(input);
-    if (!check.success) return this.error.set(check.error.issues[0]?.message ?? 'Invalid connection.');
+    if (!check.success) return this.error.set(check.error.issues[0]?.message ?? t('Invalid connection.'));
     this.error.set(null);
     this.busy.set(true);
     try {
@@ -234,7 +235,7 @@ export class LinksView {
   protected async save(l: FloorLinkDto, patch: Partial<FloorLinkInput>): Promise<void> {
     const check = floorLinkUpdateSchema.safeParse(patch);
     if (!check.success) {
-      this.error.set(check.error.issues[0]?.message ?? 'Invalid value.');
+      this.error.set(check.error.issues[0]?.message ?? t('Invalid value.'));
       return;
     }
     this.error.set(null);
@@ -248,9 +249,9 @@ export class LinksView {
 
   protected async remove(l: FloorLinkDto): Promise<void> {
     const ok = await this.confirm.ask({
-      title: 'Delete floor connection?',
-      message: `${cableSummary(l.cable)}, ${l.lengthM} m between ${this.name(l.fromComponentId)} and ${this.name(l.toComponentId)}.`,
-      confirmLabel: 'Delete connection',
+      title: t('Delete floor connection?'),
+      message: t('{cable}, {m} m between {a} and {b}.', { cable: cableSummary(l.cable), m: l.lengthM, a: this.name(l.fromComponentId), b: this.name(l.toComponentId) }),
+      confirmLabel: t('Delete connection'),
       danger: true,
     });
     if (!ok) return;

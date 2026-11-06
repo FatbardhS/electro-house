@@ -1,0 +1,204 @@
+<header class="nav" [class.solid]="scrolled()">
+  <div class="wrap nav-row">
+    <a class="brand" routerLink="/"><app-brand-mark [size]="24" /> Electro House</a>
+    <nav [class.open]="menuOpen()">
+      <a (click)="go('how')">{{ 'How it works' | t }}</a>
+      <a (click)="go('features')">{{ 'Features' | t }}</a>
+      <a (click)="go('showroom')">{{ 'Showroom' | t }}</a>
+      <a (click)="go('pricing')">{{ 'Pricing' | t }}</a>
+    </nav>
+    <div class="nav-actions">
+      <app-lang-switch />
+      @if (auth.isSignedIn()) {
+        <a class="btn btn-primary" routerLink="/clients">{{ 'Open the app' | t }} →</a>
+      } @else {
+        <a class="btn btn-ghost hide-sm" routerLink="/sign-in">{{ 'Sign in' | t }}</a>
+        <a class="btn btn-primary" routerLink="/sign-up">{{ 'Try it free' | t }}</a>
+      }
+      <button class="burger" type="button" (click)="menuOpen.set(!menuOpen())" [attr.aria-label]="'Menu' | t"><span></span><span></span></button>
+    </div>
+  </div>
+</header>
+
+<!-- ── Hero ── -->
+<section class="hero">
+  <div class="bg-grid"></div>
+  <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+  <div class="wrap hero-row">
+    <div class="hero-copy">
+      <span class="eyebrow">⚡ {{ 'Electrical installation planning' | t }}</span>
+      <h1>
+        {{ 'Plan the electrics' | t }}<br />
+        <span class="grad">{{ 'right on the house plan.' | t }}</span>
+      </h1>
+      <p class="sub">{{ 'Draw lights, sockets and circuits on the architect’s PDF. Electro House measures the cables, checks the installation and prepares the material list and the price – in minutes, not days.' | t }}</p>
+      <div class="cta">
+        <a class="btn btn-primary btn-lg glow" routerLink="/sign-up">{{ 'Start free – {n} days' | t: { n: trialDays } }}</a>
+        <a class="btn btn-lg btn-outline" (click)="go('showroom')">▶ {{ 'See how it looks' | t }}</a>
+      </div>
+      <p class="fine">{{ 'No card needed · Cancel any time · Albanian & English' | t }}</p>
+      <div class="stats">
+        <div><strong>55+</strong><span>{{ 'symbols' | t }}</span></div>
+        <div><strong>1:50</strong><span>{{ 'exact scale' | t }}</span></div>
+        <div><strong>PDF · DXF</strong><span>{{ 'exports' | t }}</span></div>
+      </div>
+    </div>
+    <div class="hero-visual">
+      <div class="window">
+        <div class="win-bar"><i></i><i></i><i></i><span>{{ 'Ground floor' | t }} · 1:50</span></div>
+        <app-plan-animation />
+      </div>
+      <div class="badge b1"><strong>42,6 m</strong><span>{{ 'cable NYM 3×1,5' | t }}</span></div>
+      <div class="badge b2"><span class="dot ok"></span>{{ 'All checks passed' | t }}</div>
+      <div class="badge b3"><strong>€ 1.284</strong><span>{{ 'materials total' | t }}</span></div>
+    </div>
+  </div>
+  <a class="scroll-hint" (click)="go('how')" [attr.aria-label]="'Scroll down' | t"><span></span></a>
+</section>
+
+<!-- ── How it works ── -->
+<section id="how" class="section">
+  <div class="wrap">
+    <div class="head" appReveal>
+      <span class="eyebrow">{{ 'How it works' | t }}</span>
+      <h2>{{ 'Four steps from plan to offer' | t }}</h2>
+    </div>
+    <ol class="steps">
+      @for (s of steps; track s.title; let i = $index) {
+        <li appReveal [revealDelay]="i * 120">
+          <span class="num">{{ i + 1 }}</span>
+          <h3>{{ s.title | t }}</h3>
+          <p>{{ s.text | t }}</p>
+        </li>
+      }
+    </ol>
+  </div>
+</section>
+
+<!-- ── Features ── -->
+<section id="features" class="section alt">
+  <div class="wrap">
+    <div class="head" appReveal>
+      <span class="eyebrow">{{ 'Features' | t }}</span>
+      <h2>{{ 'Everything an electrician needs for the plan' | t }}</h2>
+      <p class="muted">{{ 'Fast to draw, exact to measure, ready to hand over.' | t }}</p>
+    </div>
+    <div class="features">
+      @for (f of features; track f.title; let i = $index) {
+        <article class="feature" appReveal="zoom" [revealDelay]="(i % 4) * 90" (pointermove)="spot($event)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="f.icon" /></svg>
+          <h3>{{ f.title | t }}</h3>
+          <p>{{ f.text | t }}</p>
+        </article>
+      }
+    </div>
+  </div>
+</section>
+
+<!-- ── Showroom ── -->
+<section id="showroom" class="section">
+  <div class="wrap">
+    <div class="head" appReveal>
+      <span class="eyebrow">{{ 'Showroom' | t }}</span>
+      <h2>{{ 'See Electro House in action' | t }}</h2>
+      <p class="muted">{{ 'Real screens from the app, with a sample house.' | t }}</p>
+    </div>
+    <div class="showroom" appReveal="zoom">
+      <div class="tabs" role="tablist">
+        @for (s of shots; track s.file; let i = $index) {
+          <button type="button" role="tab" [class.on]="shot() === i" [attr.aria-selected]="shot() === i" (click)="pickShot(i)">
+            <strong>{{ s.title | t }}</strong>
+            <span>{{ s.text | t }}</span>
+            @if (shot() === i) { <i class="progress"></i> }
+          </button>
+        }
+      </div>
+      <div class="screen">
+        <div class="win-bar"><i></i><i></i><i></i><span>electro-house.app</span></div>
+        <div class="frames">
+          @for (s of shots; track s.file; let i = $index) {
+            <img [src]="shotSrc(s.file)" [alt]="s.title | t" [class.on]="shot() === i" loading="lazy" width="1600" height="900" />
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Pricing ── -->
+<section id="pricing" class="section alt">
+  <div class="wrap">
+    <div class="head" appReveal>
+      <span class="eyebrow">{{ 'Pricing' | t }}</span>
+      <h2>{{ 'One simple plan' | t }}</h2>
+      <p class="muted">{{ 'Everything included. Pay only for the people who use it.' | t }}</p>
+    </div>
+    <div class="billing-toggle" appReveal>
+      <button type="button" [class.on]="!yearlyBilling()" (click)="yearlyBilling.set(false)">{{ 'Monthly' | t }}</button>
+      <button type="button" [class.on]="yearlyBilling()" (click)="yearlyBilling.set(true)">{{ 'Yearly' | t }} <em>−{{ yearlySaving }} €</em></button>
+    </div>
+    <div class="plans">
+      <div class="plan trial" appReveal="left">
+        <h3>{{ 'Free trial' | t }}</h3>
+        <div class="amount"><strong>0 €</strong><span>{{ '{n} days' | t: { n: trialDays } }}</span></div>
+        <ul>
+          <li>{{ 'All features' | t }}</li>
+          <li>{{ 'Unlimited projects' | t }}</li>
+          <li>{{ 'No card needed' | t }}</li>
+        </ul>
+        <a class="btn btn-outline wide" routerLink="/sign-up">{{ 'Start free' | t }}</a>
+      </div>
+      <div class="plan pro" appReveal="zoom" [revealDelay]="120">
+        <span class="ribbon">{{ 'Most popular' | t }}</span>
+        <h3>Electro House Pro</h3>
+        <div class="amount">
+          @if (yearlyBilling()) {
+            <strong class="flip">{{ yearly }} €</strong><span>{{ '/ user / year' | t }}</span>
+          } @else {
+            <strong class="flip">{{ monthly }} €</strong><span>{{ '/ user / month' | t }}</span>
+          }
+        </div>
+        <ul>
+          <li>{{ 'Unlimited clients, projects and floors' | t }}</li>
+          <li>{{ 'Circuits, boards and automatic checks' | t }}</li>
+          <li>{{ 'Material list, price list and quotes' | t }}</li>
+          <li>{{ 'PDF and DXF export' | t }}</li>
+          <li>{{ 'Team members and roles' | t }}</li>
+          <li>{{ 'Albanian and English' | t }}</li>
+        </ul>
+        <a class="btn btn-primary wide glow" routerLink="/sign-up">{{ 'Start free – {n} days' | t: { n: trialDays } }}</a>
+        <p class="fine">{{ 'Prices without VAT.' | t }}</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FAQ ── -->
+<section class="section">
+  <div class="wrap narrow">
+    <div class="head" appReveal><h2>{{ 'Questions' | t }}</h2></div>
+    @for (f of faq; track f.q; let i = $index) {
+      <div class="faq" [class.open]="openFaq() === i" appReveal [revealDelay]="i * 80">
+        <button type="button" (click)="toggleFaq(i)" [attr.aria-expanded]="openFaq() === i">{{ f.q | t }}<span>+</span></button>
+        <div class="answer"><p>{{ f.a | t }}</p></div>
+      </div>
+    }
+  </div>
+</section>
+
+<!-- ── Final call to action ── -->
+<section class="final">
+  <div class="wrap" appReveal="zoom">
+    <h2>{{ 'Your next installation plan, ready today.' | t }}</h2>
+    <p>{{ 'Create an account in under a minute and upload your first plan.' | t }}</p>
+    <a class="btn btn-primary btn-lg glow" routerLink="/sign-up">{{ 'Try it free' | t }}</a>
+  </div>
+</section>
+
+<footer class="foot">
+  <div class="wrap foot-row">
+    <span class="brand"><app-brand-mark [size]="18" /> Electro House</span>
+    <span class="muted">© 2026 Electro House · {{ 'Electrical installation planning' | t }}</span>
+    <a routerLink="/sign-in">{{ 'Sign in' | t }}</a>
+  </div>
+</footer>

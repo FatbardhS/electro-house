@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
-import { DecimalPipe } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 import {
@@ -26,46 +25,50 @@ import {
 import { Api } from '../../core/api';
 import { errorMessage, toApiError } from '../../core/api-error';
 import { ErrorState, LoadingState } from '../../shared/ui/states';
+import { I18N_PIPES } from '../../core/i18n/t.pipe';
+import type { TKey } from '../../core/i18n/sq';
+import { t, tx } from '../../core/i18n/i18n.service';
+import { I18n } from '../../core/i18n/i18n.service';
 
 type OverrideKey = 'markupPct' | 'vatPct' | 'hourlyRate' | 'wastePct' | 'endReserveM' | 'boardTailM';
 
-/** Bill of materials with measured vs allowance quantities, cost summary, and the project's cost overrides. */
+/** Bill of materials with measured vs allowance quantities, cost summary, and the project’s cost overrides. */
 @Component({
   selector: 'app-materials-view',
-  imports: [DecimalPipe, RouterLink, LoadingState, ErrorState],
+  imports: [I18N_PIPES, RouterLink, LoadingState, ErrorState],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (settings.error() || materials.error() || rules.error(); as err) {
       <app-error-state [message]="message(err)" (retry)="settings.reload(); materials.reload(); rules.reload()" />
     } @else if (!report()) {
-      <app-loading label="Loading prices…" />
+      <app-loading [label]="'Loading prices…' | t" />
     } @else {
       @let r = report()!;
       @let cur = r.cost.currency;
 
       @if (materials.value()?.length === 0) {
-        <div class="banner banner-warn">Your price list is empty, so nothing can be priced yet.
-          <a routerLink="/settings" [queryParams]="{ tab: 'prices' }">Set up the price list</a>.</div>
+        <div class="banner banner-warn">{{ 'Your price list is empty, so nothing can be priced yet.' | t }}
+          <a routerLink="/settings" [queryParams]="{ tab: 'prices' }">{{ 'Set up the price list' | t }}</a>.</div>
       }
       @if (r.project.unmapped.length) {
-        <div class="banner banner-warn">
-          ⚠ {{ r.project.unmapped.length }} item type(s) have no material assigned and are not priced:
+        <div class="banner banner-warn"><span>
+          ⚠ {{ '{n} item type(s) have no material assigned and are not priced:' | t: { n: r.project.unmapped.length } }}
           @for (u of r.project.unmapped; track u.target; let last = $last) {
-            <a routerLink="/settings" [queryParams]="{ tab: 'rules', target: u.target }">{{ u.label }}</a>
-            ({{ u.quantity | number: (u.unit === 'm' ? '1.1-1' : '1.0-0') }} {{ u.unit }}){{ last ? '.' : ',' }}
+            <a routerLink="/settings" [queryParams]="{ tab: 'rules', target: u.target }">{{ u.label | tx }}</a>
+            ({{ u.quantity | num: (u.unit === 'm' ? 1 : 0) }} {{ u.unit }}){{ last ? '.' : ',' }}
           }
-        </div>
+        </span></div>
       }
       @if (r.project.unknownRuns) {
-        <div class="banner banner-warn">⚠ {{ r.project.unknownRuns }} wire(s) are on floors without a scale calibration; their length is unknown and not included.</div>
+        <div class="banner banner-warn">⚠ {{ '{n} wire(s) are on floors without a scale calibration; their length is unknown and not included.' | t: { n: r.project.unknownRuns } }}</div>
       }
 
       <div class="layout">
         <div class="main">
           <div class="bar">
-            <span class="faint small">Group by</span>
+            <span class="faint small">{{ 'Group by' | t }}</span>
             @for (g of groupings; track g.id) {
-              <button type="button" class="chip" [class.on]="grouping() === g.id" (click)="grouping.set(g.id)">{{ g.label }}</button>
+              <button type="button" class="chip" [class.on]="grouping() === g.id" (click)="grouping.set(g.id)">{{ g.label | t }}</button>
             }
           </div>
 
@@ -76,19 +79,19 @@ type OverrideKey = 'markupPct' | 'vatPct' | 'hourlyRate' | 'wastePct' | 'endRese
                 <div class="scroll">
                   <table class="table dense">
                     <thead><tr>
-                      <th>Cable</th><th class="num">Runs</th><th class="num">Measured m</th><th class="num">Drops m</th>
-                      <th class="num">Reserves m</th><th class="num">Waste m</th><th class="num">Total m</th>
+                      <th>{{ 'Cable' | t }}</th><th class="num">{{ 'Runs' | t }}</th><th class="num">{{ 'Measured m' | t }}</th><th class="num">{{ 'Drops m' | t }}</th>
+                      <th class="num">{{ 'Reserves m' | t }}</th><th class="num">{{ 'Waste m' | t }}</th><th class="num">{{ 'Total m' | t }}</th>
                     </tr></thead>
                     <tbody>
                       @for (c of g.bom.cables; track c.target) {
                         <tr>
-                          <td>{{ c.key }} @if (c.unknownRuns) { <span class="warn small">({{ c.unknownRuns }} not measured)</span> }</td>
+                          <td>{{ c.key }} @if (c.unknownRuns) { <span class="warn small">({{ '{n} not measured' | t: { n: c.unknownRuns } }})</span> }</td>
                           <td class="num">{{ c.runs }}</td>
-                          <td class="num mono">{{ c.measuredM | number: '1.1-1' }}</td>
-                          <td class="num mono">{{ c.dropsM | number: '1.1-1' }}</td>
-                          <td class="num mono">{{ c.terminationsM | number: '1.1-1' }}</td>
-                          <td class="num mono">{{ c.wasteM | number: '1.1-1' }}</td>
-                          <td class="num mono strong">{{ c.totalM | number: '1.1-1' }}</td>
+                          <td class="num mono">{{ c.measuredM | num: 1 }}</td>
+                          <td class="num mono">{{ c.dropsM | num: 1 }}</td>
+                          <td class="num mono">{{ c.terminationsM | num: 1 }}</td>
+                          <td class="num mono">{{ c.wasteM | num: 1 }}</td>
+                          <td class="num mono strong">{{ c.totalM | num: 1 }}</td>
                         </tr>
                       }
                     </tbody>
@@ -99,98 +102,98 @@ type OverrideKey = 'markupPct' | 'vatPct' | 'hourlyRate' | 'wastePct' | 'endRese
                 <div class="scroll">
                   <table class="table dense">
                     <thead><tr>
-                      <th>Code</th><th>Material</th><th class="num">Needed</th>
-                      @if (r.roundToPacks) { <th class="num">Packs</th><th class="num">Order</th> }
-                      <th>Unit</th><th class="num">Unit price</th><th class="num">Total</th>
+                      <th>{{ 'Code' | t }}</th><th>{{ 'Material' | t }}</th><th class="num">{{ 'Needed' | t }}</th>
+                      @if (r.roundToPacks) { <th class="num">{{ 'Packs' | t }}</th><th class="num">{{ 'Order' | t }}</th> }
+                      <th>{{ 'Unit' | t }}</th><th class="num">{{ 'Unit price' | t }}</th><th class="num">{{ 'Total' | t }}</th>
                     </tr></thead>
                     <tbody>
                       @for (l of g.bom.lines; track l.material.id) {
-                        <tr [title]="'For: ' + l.usedFor.join(', ')">
+                        <tr [title]="('For' | t) + ': ' + l.usedFor.join(', ')">
                           <td class="mono faint">{{ l.material.code ?? '' }}</td>
                           <td>{{ l.material.name }}</td>
-                          <td class="num mono">{{ l.quantity | number: '1.0-2' }}</td>
+                          <td class="num mono">{{ l.quantity | num: 2: 0 }}</td>
                           @if (r.roundToPacks) {
                             <td class="num mono">{{ l.packs ?? '—' }}</td>
-                            <td class="num mono">{{ l.orderQuantity | number: '1.0-2' }}</td>
+                            <td class="num mono">{{ l.orderQuantity | num: 2: 0 }}</td>
                           }
                           <td class="faint">{{ l.material.unit }}</td>
-                          <td class="num mono">{{ l.material.unitPrice | number: '1.2-4' }}</td>
-                          <td class="num mono">{{ l.total | number: '1.2-2' }}</td>
+                          <td class="num mono">{{ l.material.unitPrice | num: 4: 2 }}</td>
+                          <td class="num mono">{{ l.total | num: 2 }}</td>
                         </tr>
                       }
                     </tbody>
-                    <tfoot><tr><td [attr.colspan]="r.roundToPacks ? 7 : 5">Materials (net)</td><td class="num mono strong">{{ g.bom.materialsNet | number: '1.2-2' }}</td></tr></tfoot>
+                    <tfoot><tr><td [attr.colspan]="r.roundToPacks ? 7 : 5">{{ 'Materials (net)' | t }}</td><td class="num mono strong">{{ g.bom.materialsNet | num: 2 }}</td></tr></tfoot>
                   </table>
                 </div>
               } @else {
-                <p class="faint small pad">No priced materials{{ grouping() === 'project' ? '' : ' in this group' }}.</p>
+                <p class="faint small pad">{{ (grouping() === 'project' ? 'No priced materials.' : 'No priced materials in this group.') | t }}</p>
               }
             </section>
           }
           @if (grouping() !== 'project' && r.roundToPacks) {
-            <p class="faint small">Pack rounding is applied per group here; the cost summary rounds the whole project once.</p>
+            <p class="faint small">{{ 'Pack rounding is applied per group here; the cost summary rounds the whole project once.' | t }}</p>
           }
         </div>
 
         <aside class="side">
           <section class="card cost">
-            <h3>Cost summary</h3>
+            <h3>{{ 'Cost summary' | t }}</h3>
             <dl>
-              <dt>Materials</dt><dd class="mono">{{ money(r.cost.materialsNet, cur) }}</dd>
-              <dt>Markup {{ r.cost.markupPct }} %</dt><dd class="mono">{{ money(r.cost.markup, cur) }}</dd>
-              <dt>Labour {{ r.cost.ruleHours + r.cost.extraHours | number: '1.0-2' }} h × {{ r.cost.hourlyRate | number: '1.0-2' }}</dt>
+              <dt>{{ 'Materials' | t }}</dt><dd class="mono">{{ money(r.cost.materialsNet, cur) }}</dd>
+              <dt>{{ 'Markup {p} %' | t: { p: (r.cost.markupPct | num: 2: 0) } }}</dt><dd class="mono">{{ money(r.cost.markup, cur) }}</dd>
+              <dt>{{ 'Labour {h} h × {rate}' | t: { h: (r.cost.ruleHours + r.cost.extraHours | num: 2: 0), rate: (r.cost.hourlyRate | num: 2: 0) } }}</dt>
               <dd class="mono">{{ money(r.cost.labour, cur) }}</dd>
               @for (x of r.cost.extraLines; track $index) { <dt>{{ x.text }}</dt><dd class="mono">{{ money(x.amount, cur) }}</dd> }
-              <dt class="sum">Net</dt><dd class="mono sum">{{ money(r.cost.net, cur) }}</dd>
-              <dt>VAT {{ r.cost.vatPct }} %</dt><dd class="mono">{{ money(r.cost.vat, cur) }}</dd>
-              <dt class="total">Total</dt><dd class="mono total">{{ money(r.cost.gross, cur) }}</dd>
+              <dt class="sum">{{ 'Net' | t }}</dt><dd class="mono sum">{{ money(r.cost.net, cur) }}</dd>
+              <dt>{{ 'VAT {p} %' | t: { p: (r.cost.vatPct | num: 2: 0) } }}</dt><dd class="mono">{{ money(r.cost.vat, cur) }}</dd>
+              <dt class="total">{{ 'Total' | t }}</dt><dd class="mono total">{{ money(r.cost.gross, cur) }}</dd>
             </dl>
-            <p class="faint small">{{ r.cost.note }}</p>
+            <p class="faint small">{{ r.cost.note | tx }}</p>
           </section>
 
           <form class="card form" (submit)="$event.preventDefault(); saveCost()">
-            <h3>This project</h3>
-            <p class="faint small">Leave a field empty to use the company setting (shown in grey).</p>
+            <h3>{{ 'This project' | t }}</h3>
+            <p class="faint small">{{ 'Leave a field empty to use the company setting (shown in grey).' | t }}</p>
             <div class="two">
               @for (o of overrides; track o.key) {
-                <label class="f"><span>{{ o.label }}</span>
+                <label class="f"><span>{{ o.label | t }}</span>
                   <input class="input mono" type="number" min="0" [step]="o.step" [value]="cost()[o.key] ?? ''" [placeholder]="companyValue(o.key)"
                          (input)="setOverride(o.key, $event)" /></label>
               }
-              <label class="f"><span>Extra labour hours</span>
+              <label class="f"><span>{{ 'Extra labour hours' | t }}</span>
                 <input class="input mono" type="number" min="0" step="0.5" [value]="cost().extraHours" (input)="patchCost({ extraHours: num($event) ?? 0 })" /></label>
             </div>
-            <div class="f"><span>Extra lines (net; negative for a discount)</span>
+            <div class="f"><span>{{ 'Extra lines (net; negative for a discount)' | t }}</span>
               @for (x of cost().extraLines; track $index; let i = $index) {
                 <div class="line">
-                  <input class="input" maxlength="200" [value]="x.text" placeholder="e.g. Testing and commissioning" (input)="setLine(i, { text: str($event) })" />
+                  <input class="input" maxlength="200" [value]="x.text" [placeholder]="'e.g. Testing and commissioning' | t" (input)="setLine(i, { text: str($event) })" />
                   <input class="input mono amt" type="number" step="0.01" [value]="x.amount" (input)="setLine(i, { amount: num($event) ?? 0 })" />
-                  <button class="btn btn-sm btn-ghost" type="button" (click)="removeLine(i)" aria-label="Remove line">✕</button>
+                  <button class="btn btn-sm btn-ghost" type="button" (click)="removeLine(i)" [attr.aria-label]="'Remove line' | t">✕</button>
                 </div>
               }
-              <button class="btn btn-sm btn-ghost add" type="button" (click)="addLine()">+ Add line</button>
+              <button class="btn btn-sm btn-ghost add" type="button" (click)="addLine()">+ {{ 'Add line' | t }}</button>
             </div>
-            <label class="f"><span>Note on the cost report</span>
-              <textarea class="input" rows="3" maxlength="2000" [value]="cost().note" [placeholder]="defaultNote" (input)="patchCost({ note: str($event) })"></textarea></label>
-            @if (costError(); as e) { <div class="banner banner-error">{{ e }}</div> }
-            <button class="btn btn-primary btn-sm" type="submit" [disabled]="busy() || !costDirty()">{{ costDirty() ? 'Save project costs' : 'Saved' }}</button>
+            <label class="f"><span>{{ 'Note on the cost report' | t }}</span>
+              <textarea class="input" rows="3" maxlength="2000" [value]="cost().note" [placeholder]="defaultNote | tx" (input)="patchCost({ note: str($event) })"></textarea></label>
+            @if (costError(); as e) { <div class="banner banner-error">{{ e | tx }}</div> }
+            <button class="btn btn-primary btn-sm" type="submit" [disabled]="busy() || !costDirty()">{{ (costDirty() ? 'Save project costs' : 'Saved') | t }}</button>
           </form>
 
           <section class="card form">
-            <h3>Floor heights</h3>
-            <p class="faint small">Used for vertical drops from the cable route to each component's mounting height.</p>
+            <h3>{{ 'Floor heights' | t }}</h3>
+            <p class="faint small">{{ 'Used for vertical drops from the cable route to each component\’s mounting height.' | t }}</p>
             @for (f of installation().floors; track f.floorId) {
               <div class="floor">
                 <span class="name">{{ f.name }}</span>
                 <input class="input mono h" type="number" min="1500" max="20000" step="10" [value]="f.ceilingHeightMm"
-                       (change)="saveFloor(f, { ceilingHeightMm: num($event) ?? f.ceilingHeightMm })" aria-label="Ceiling height in mm" />
+                       (change)="saveFloor(f, { ceilingHeightMm: num($event) ?? f.ceilingHeightMm })" [attr.aria-label]="'Ceiling height in mm' | t" />
                 <span class="faint small">mm</span>
-                <select class="input" (change)="saveFloor(f, { cableRouting: $any(str($event)) })" aria-label="Cable route">
-                  @for (o of routings; track o) { <option [value]="o" [selected]="o === f.cableRouting">{{ o === 'ceiling' ? 'in ceiling' : 'in floor' }}</option> }
+                <select class="input" (change)="saveFloor(f, { cableRouting: $any(str($event)) })" [attr.aria-label]="'Cable route' | t">
+                  @for (o of routings; track o) { <option [value]="o" [selected]="o === f.cableRouting">{{ (o === 'ceiling' ? 'in ceiling' : 'in floor') | t }}</option> }
                 </select>
               </div>
             }
-            @if (floorError(); as e) { <div class="banner banner-error">{{ e }}</div> }
+            @if (floorError(); as e) { <div class="banner banner-error">{{ e | tx }}</div> }
           </section>
         </aside>
       </div>
@@ -234,6 +237,7 @@ type OverrideKey = 'markupPct' | 'vatPct' | 'hourlyRate' | 'wastePct' | 'endRese
   `,
 })
 export class MaterialsView {
+  private readonly i18n = inject(I18n);
   private readonly api = inject(Api);
   readonly installation = input.required<InstallationDto>();
   readonly changed = output<void>();
@@ -242,12 +246,12 @@ export class MaterialsView {
   protected readonly materials = httpResource<MaterialDto[]>(() => '/api/materials');
   protected readonly rules = httpResource<MaterialRuleDto[]>(() => '/api/material-rules');
 
-  protected readonly groupings: { id: BomGrouping; label: string }[] = [
+  protected readonly groupings: { id: BomGrouping; label: TKey }[] = [
     { id: 'project', label: 'Whole project' },
     { id: 'floor', label: 'Floor' },
     { id: 'circuit', label: 'Circuit' },
   ];
-  protected readonly overrides: { key: OverrideKey; label: string; step: number }[] = [
+  protected readonly overrides: { key: OverrideKey; label: TKey; step: number }[] = [
     { key: 'markupPct', label: 'Markup %', step: 0.5 },
     { key: 'vatPct', label: 'VAT %', step: 0.1 },
     { key: 'hourlyRate', label: 'Labour rate / h', step: 0.5 },
@@ -279,17 +283,18 @@ export class MaterialsView {
     const rules = this.rules.value();
     const eff = effectiveCostSettings(this.settings.value(), this.cost());
     const opts = { allowances: eff.allowances, roundToPacks: eff.roundToPacks };
-    const t = takeoff(inst, eff.allowances);
-    const project = buildBom(t, materials, rules, opts);
+    const tk = takeoff(inst, eff.allowances);
+    const project = buildBom(tk, materials, rules, opts);
     const groups =
       this.grouping() === 'project'
-        ? [{ id: 'project', name: 'Whole project', bom: project }]
-        : groupTakeoff(t, inst, this.grouping()).map((g) => ({ id: g.id, name: g.name, bom: buildBom(g.takeoff, materials, rules, opts) }));
+        ? [{ id: 'project', name: t('Whole project'), bom: project }]
+        : groupTakeoff(tk, inst, this.grouping()).map((g) => ({ id: g.id, name: g.name, bom: buildBom(g.takeoff, materials, rules, opts) }));
     return { project, groups, cost: costSummary(project, eff, this.cost()), roundToPacks: eff.roundToPacks };
   });
 
   protected money(v: number, currency: string): string {
-    return formatMoney(v, currency);
+    this.i18n.lang(); // re-format on language change
+    return this.i18n.money(v, currency);
   }
 
   protected companyValue(key: OverrideKey): string {
@@ -328,7 +333,7 @@ export class MaterialsView {
   protected async saveCost(): Promise<void> {
     const check = projectCostSettingsSchema.safeParse(this.cost());
     if (!check.success) {
-      this.costError.set(check.error.issues[0]?.message ?? 'Invalid value.');
+      this.costError.set(check.error.issues[0]?.message ?? t('Invalid value.'));
       return;
     }
     this.costError.set(null);
@@ -346,7 +351,7 @@ export class MaterialsView {
   protected async saveFloor(f: FloorInstallationDto, patch: Partial<Pick<FloorInstallationDto, 'ceilingHeightMm' | 'cableRouting'>>): Promise<void> {
     const check = floorHeightsSchema.safeParse({ ceilingHeightMm: f.ceilingHeightMm, cableRouting: f.cableRouting, ...patch });
     if (!check.success) {
-      this.floorError.set(check.error.issues[0]?.message ?? 'Invalid value.');
+      this.floorError.set(check.error.issues[0]?.message ?? t('Invalid value.'));
       return;
     }
     this.floorError.set(null);

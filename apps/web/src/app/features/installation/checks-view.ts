@@ -14,31 +14,35 @@ import {
 import { Api } from '../../core/api';
 import { toApiError } from '../../core/api-error';
 import { EmptyState } from '../../shared/ui/states';
+import { I18N_PIPES } from '../../core/i18n/t.pipe';
+import type { TKey } from '../../core/i18n/sq';
+import { t, tx } from '../../core/i18n/i18n.service';
 
-const SEVERITY_LABEL: Record<Severity, string> = { error: 'Error', warning: 'Warning', info: 'Info' };
+const SEVERITY_LABEL: Record<Severity, TKey> = { error: 'Error', warning: 'Warning', info: 'Info' };
+const SEVERITY_PLURAL: Record<Severity, TKey> = { error: 'Errors', warning: 'Warnings', info: 'Notes' };
 
 /** All validation issues of the project, grouped by floor, with "show on plan" and ignore / restore. */
 @Component({
   selector: 'app-checks-view',
-  imports: [RouterLink, EmptyState],
+  imports: [I18N_PIPES, RouterLink, EmptyState],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @let r = result();
     <div class="bar">
       @for (s of severities; track s) {
         <button type="button" class="chip" [class]="'chip ' + s" [class.on]="shown().has(s)" (click)="toggle(s)">
-          {{ r.summary[s] }} {{ label[s] }}{{ r.summary[s] === 1 ? '' : 's' }}</button>
+          {{ r.summary[s] }} {{ (r.summary[s] === 1 ? label[s] : plural[s]) | t }}</button>
       }
       <label class="faint small check"><input type="checkbox" [checked]="showIgnored()" (change)="showIgnored.set($any($event.target).checked)" />
-        Show ignored ({{ r.summary.ignored }})</label>
-      @if (!pricesLoaded()) { <span class="faint small">Price checks load with the price list…</span> }
+        {{ 'Show ignored ({n})' | t: { n: r.summary.ignored } }}</label>
+      @if (!pricesLoaded()) { <span class="faint small">{{ 'Price checks load with the price list…' | t }}</span> }
     </div>
-    @if (error(); as e) { <div class="banner banner-error" role="alert">{{ e }}</div> }
+    @if (error(); as e) { <div class="banner banner-error" role="alert">{{ e | tx }}</div> }
 
     @if (groups().length === 0) {
       <div class="card">
-        <app-empty-state [heading]="r.open.length === 0 ? 'No problems found' : 'Nothing matches the filter'"
-          [text]="r.open.length === 0 ? 'The checks found nothing to fix in this project.' : 'Turn on more severities above to see them.'" />
+        <app-empty-state [heading]="(r.open.length === 0 ? 'No problems found' : 'Nothing matches the filter') | t"
+          [text]="(r.open.length === 0 ? 'The checks found nothing to fix in this project.' : 'Turn on more severities above to see them.') | t" />
       </div>
     }
     @for (g of groups(); track g.key) {
@@ -47,22 +51,22 @@ const SEVERITY_LABEL: Record<Severity, string> = { error: 'Error', warning: 'War
         <ul>
           @for (i of g.items; track i.issue.id) {
             <li [class.ignored]="i.ignored">
-              <span class="sev" [class]="'sev ' + i.issue.severity">{{ label[i.issue.severity] }}</span>
+              <span class="sev" [class]="'sev ' + i.issue.severity">{{ label[i.issue.severity] | t }}</span>
               <div class="text">
-                <div class="title">{{ checkTitle[i.issue.code] }} <span class="faint mono small">{{ i.issue.code }}</span></div>
+                <div class="title">{{ checkTitle[i.issue.code] | tx }} <span class="faint mono small">{{ i.issue.code }}</span></div>
                 <div class="msg">{{ i.issue.message }}</div>
               </div>
               <div class="acts">
                 @if (i.issue.floorId && (i.issue.componentIds.length || i.issue.wireIds.length)) {
                   <a class="btn btn-sm" [routerLink]="['/projects', installation().projectId, 'floors', i.issue.floorId]"
-                     [queryParams]="{ select: [...i.issue.componentIds, ...i.issue.wireIds].join(',') }">Show on plan</a>
+                     [queryParams]="{ select: [...i.issue.componentIds, ...i.issue.wireIds].join(',') }">{{ 'Show on plan' | t }}</a>
                 } @else if (i.issue.floorId) {
-                  <a class="btn btn-sm" [routerLink]="['/projects', installation().projectId, 'floors', i.issue.floorId]">Open floor</a>
+                  <a class="btn btn-sm" [routerLink]="['/projects', installation().projectId, 'floors', i.issue.floorId]">{{ 'Open floor' | t }}</a>
                 }
                 @if (i.ignored) {
-                  <button class="btn btn-sm btn-ghost" type="button" (click)="restore(i.issue)" [disabled]="busy()">Restore</button>
+                  <button class="btn btn-sm btn-ghost" type="button" (click)="restore(i.issue)" [disabled]="busy()">{{ 'Restore' | t }}</button>
                 } @else {
-                  <button class="btn btn-sm btn-ghost" type="button" (click)="ignore(i.issue)" [disabled]="busy()" title="Hide this issue for this project">Ignore</button>
+                  <button class="btn btn-sm btn-ghost" type="button" (click)="ignore(i.issue)" [disabled]="busy()" [title]="'Hide this issue for this project' | t">{{ 'Ignore' | t }}</button>
                 }
               </div>
             </li>
@@ -70,7 +74,7 @@ const SEVERITY_LABEL: Record<Severity, string> = { error: 'Error', warning: 'War
         </ul>
       </section>
     }
-    <p class="faint small">Checks use the plans and the limits in your rules profile. They are planning aids, not a certification.</p>
+    <p class="faint small">{{ 'Checks use the plans and the limits in your rules profile. They are planning aids, not a certification.' | t }}</p>
   `,
   styles: `
     .bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
@@ -109,6 +113,7 @@ export class ChecksView {
   private readonly rules = httpResource<MaterialRuleDto[]>(() => '/api/material-rules');
   protected readonly severities: Severity[] = ['error', 'warning', 'info'];
   protected readonly label = SEVERITY_LABEL;
+  protected readonly plural = SEVERITY_PLURAL;
   protected readonly checkTitle = CHECKS;
   protected readonly shown = signal(new Set<Severity>(['error', 'warning', 'info']));
   protected readonly showIgnored = signal(false);
@@ -132,7 +137,7 @@ export class ChecksView {
     return order
       .map((floorId) => ({
         key: floorId ?? 'project',
-        name: floorId ? (floors.find((f) => f.floorId === floorId)?.name ?? 'Floor') : 'Whole project',
+        name: floorId ? (floors.find((f) => f.floorId === floorId)?.name ?? t('Floor')) : t('Whole project'),
         items: items.filter((i) => i.issue.floorId === floorId),
       }))
       .filter((g) => g.items.length);

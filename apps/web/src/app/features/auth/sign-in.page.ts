@@ -1,45 +1,45 @@
 import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { signInSchema } from '@electro/shared';
+import { TRIAL_DAYS, signInSchema } from '@electro/shared';
 import { AuthService } from '../../core/auth.service';
 import { FormState } from '../../core/forms';
-import { BrandMark } from '../../shared/ui/brand-mark';
+import { I18N_PIPES } from '../../core/i18n/t.pipe';
+import { AuthShell } from './auth-shell';
 
 @Component({
   selector: 'app-sign-in-page',
-  imports: [FormsModule, RouterLink, BrandMark],
+  imports: [FormsModule, RouterLink, AuthShell, I18N_PIPES],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './auth-layout.css',
   template: `
-    <div class="card auth-card">
-      <div class="brand"><app-brand-mark /> Electro House</div>
-      <h1>Sign in</h1>
-      <p class="lead">Electrical installation planning for professionals.</p>
+    <app-auth-shell>
+      <h1>{{ 'Welcome back' | t }}</h1>
+      <p class="lead">{{ 'Sign in to continue planning your installations.' | t }}</p>
 
       @if (form.formError(); as err) {
-        <div class="banner banner-error" role="alert">{{ err }}</div>
+        <div class="banner banner-error" role="alert">{{ err | tx }}</div>
       }
 
       <form (ngSubmit)="submit()" novalidate>
         <div class="field">
-          <label for="email">Email</label>
+          <label for="email">{{ 'Email' | t }}</label>
           <input id="email" class="input" type="email" name="email" autocomplete="email"
                  [(ngModel)]="model.email" [class.invalid]="form.error('email')" required />
-          @if (form.error('email'); as e) { <span class="field-error">{{ e }}</span> }
+          @if (form.error('email'); as e) { <span class="field-error">{{ e | tx }}</span> }
         </div>
         <div class="field">
-          <label for="password">Password</label>
+          <label for="password">{{ 'Password' | t }}</label>
           <input id="password" class="input" type="password" name="password" autocomplete="current-password"
                  [(ngModel)]="model.password" [class.invalid]="form.error('password')" required />
-          @if (form.error('password'); as e) { <span class="field-error">{{ e }}</span> }
+          @if (form.error('password'); as e) { <span class="field-error">{{ e | tx }}</span> }
         </div>
         <button class="btn btn-primary" type="submit" [disabled]="form.submitting()">
-          {{ form.submitting() ? 'Signing in…' : 'Sign in' }}
+          {{ (form.submitting() ? 'Signing in…' : 'Sign in') | t }}
         </button>
       </form>
-      <p class="switch">New here? <a routerLink="/sign-up">Create an account</a></p>
-    </div>
+      <p class="switch">{{ 'New here?' | t }} <a routerLink="/sign-up">{{ 'Create an account – {n} days free' | t: { n: trialDays } }}</a></p>
+    </app-auth-shell>
   `,
 })
 export class SignInPage {
@@ -50,6 +50,7 @@ export class SignInPage {
 
   protected readonly model = { email: '', password: '' };
   protected readonly form = new FormState(signInSchema);
+  protected readonly trialDays = TRIAL_DAYS;
 
   protected async submit(): Promise<void> {
     const ok = await this.form.submit(this.model, (v) => this.auth.signIn(v));

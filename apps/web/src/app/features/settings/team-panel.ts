@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { DatePipe } from '@angular/common';
 import { HttpClient, httpResource } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import {
@@ -22,39 +21,41 @@ import { errorMessage, toApiError } from '../../core/api-error';
 import { AuthService } from '../../core/auth.service';
 import { ConfirmService } from '../../shared/ui/confirm-dialog';
 import { ErrorState, LoadingState } from '../../shared/ui/states';
+import { I18N_PIPES } from '../../core/i18n/t.pipe';
+import { I18n, t, tx } from '../../core/i18n/i18n.service';
 
 /** Members and roles of the company, pending invitations, and the invite form (copy-link delivery). */
 @Component({
   selector: 'app-team-panel',
-  imports: [DatePipe, LoadingState, ErrorState],
+  imports: [I18N_PIPES, LoadingState, ErrorState],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (team.error(); as err) {
       <app-error-state [message]="message(err)" (retry)="team.reload()" />
     } @else if (!team.hasValue()) {
-      <app-loading label="Loading team…" />
+      <app-loading [label]="'Loading team…' | t" />
     } @else {
       @let t = team.value();
-      @if (error(); as e) { <div class="banner banner-error" role="alert">{{ e }}</div> }
+      @if (error(); as e) { <div class="banner banner-error" role="alert">{{ e | tx }}</div> }
 
       @if (manager()) {
         <form class="card invite" (submit)="$event.preventDefault(); invite()">
-          <h3>Invite someone</h3>
+          <h3>{{ 'Invite someone' | t }}</h3>
           <div class="row">
-            <input class="input email" type="email" placeholder="name@example.com" [value]="email()" (input)="email.set(val($event))" aria-label="Email" />
-            <select class="input" (change)="role.set($any(val($event)))" aria-label="Role">
-              @for (r of roles; track r) { <option [value]="r" [selected]="r === role()">{{ roleNames[r] }}</option> }
+            <input class="input email" type="email" [placeholder]="'name@example.com' | t" [value]="email()" (input)="email.set(val($event))" [attr.aria-label]="'Email' | t" />
+            <select class="input" (change)="role.set($any(val($event)))" [attr.aria-label]="'Role' | t">
+              @for (r of roles; track r) { <option [value]="r" [selected]="r === role()">{{ roleNames[r] | tx }}</option> }
             </select>
-            <button class="btn btn-primary" type="submit" [disabled]="busy()">Create invitation link</button>
+            <button class="btn btn-primary" type="submit" [disabled]="busy()">{{ 'Create invitation link' | t }}</button>
           </div>
-          <p class="faint small">{{ seatNote() }} Admins can manage prices, billing and the team; members work on projects.</p>
+          <p class="faint small">{{ seatNote() }} {{ 'Admins can manage prices, billing and the team; members work on projects.' | t }}</p>
           @if (created(); as c) {
             <div class="link">
-              <div class="small"><strong>Send this link to {{ c.invitation.email }}</strong> (by email, WhatsApp…). It works once, for that email
-                address, until {{ c.invitation.expiresAt | date: 'mediumDate' }}. It is shown only now.</div>
+              <div class="small"><strong>{{ 'Send this link to {email}' | t: { email: c.invitation.email } }}</strong>
+                {{ '(by email, WhatsApp…). It works once, for that email address, until {date}. It is shown only now.' | t: { date: (c.invitation.expiresAt | ldate) } }}</div>
               <div class="row">
-                <input class="input mono" readonly [value]="c.link" (focus)="$any($event.target).select()" aria-label="Invitation link" />
-                <button class="btn" type="button" (click)="copy(c.link)">{{ copied() ? 'Copied' : 'Copy link' }}</button>
+                <input class="input mono" readonly [value]="c.link" (focus)="$any($event.target).select()" [attr.aria-label]="'Invitation link' | t" />
+                <button class="btn" type="button" (click)="copy(c.link)">{{ (copied() ? 'Copied' : 'Copy link') | t }}</button>
               </div>
             </div>
           }
@@ -62,31 +63,31 @@ import { ErrorState, LoadingState } from '../../shared/ui/states';
       }
 
       <section class="card">
-        <h3>Members · {{ t.members.length }}</h3>
+        <h3>{{ 'Members' | t }} · {{ t.members.length }}</h3>
         <table class="table dense">
-          <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Joined</th><th></th></tr></thead>
+          <thead><tr><th>{{ 'Name' | t }}</th><th>{{ 'Email' | t }}</th><th>{{ 'Role' | t }}</th><th>{{ 'Joined' | t }}</th><th></th></tr></thead>
           <tbody>
             @for (m of t.members; track m.userId) {
               <tr>
-                <td>{{ m.name }} @if (m.userId === me()) { <span class="faint small">(you)</span> }</td>
+                <td>{{ m.name }} @if (m.userId === me()) { <span class="faint small">{{ '(you)' | t }}</span> }</td>
                 <td class="faint">{{ m.email }}</td>
                 <td>
                   @if (canChange(m)) {
-                    <select class="cell" (change)="changeRole(m, $any(val($event)))" [attr.aria-label]="'Role of ' + m.name">
-                      @for (r of roles; track r) { <option [value]="r" [selected]="r === m.role">{{ roleNames[r] }}</option> }
+                    <select class="cell" (change)="changeRole(m, $any(val($event)))" [attr.aria-label]="'Role of {name}' | t: { name: m.name }">
+                      @for (r of roles; track r) { <option [value]="r" [selected]="r === m.role">{{ roleNames[r] | tx }}</option> }
                     </select>
                   } @else { {{ roleNames[m.role] }} }
                 </td>
-                <td class="faint">{{ m.joinedAt | date: 'mediumDate' }}</td>
+                <td class="faint">{{ m.joinedAt | ldate }}</td>
                 <td class="acts">
                   @if (myRole() === 'OWNER' && m.role === 'ADMIN') {
-                    <button class="btn btn-sm btn-ghost" type="button" (click)="transfer(m)" [disabled]="busy()">Make owner</button>
+                    <button class="btn btn-sm btn-ghost" type="button" (click)="transfer(m)" [disabled]="busy()">{{ 'Make owner' | t }}</button>
                   }
                   @if (canChange(m)) {
-                    <button class="btn btn-sm btn-ghost btn-danger" type="button" (click)="remove(m)" [disabled]="busy()">Remove</button>
+                    <button class="btn btn-sm btn-ghost btn-danger" type="button" (click)="remove(m)" [disabled]="busy()">{{ 'Remove' | t }}</button>
                   }
                   @if (m.userId === me() && m.role !== 'OWNER') {
-                    <button class="btn btn-sm btn-ghost btn-danger" type="button" (click)="leave()" [disabled]="busy()">Leave company</button>
+                    <button class="btn btn-sm btn-ghost btn-danger" type="button" (click)="leave()" [disabled]="busy()">{{ 'Leave company' | t }}</button>
                   }
                 </td>
               </tr>
@@ -97,23 +98,23 @@ import { ErrorState, LoadingState } from '../../shared/ui/states';
 
       @if (manager()) {
         <section class="card">
-          <h3>Pending invitations · {{ t.invitations.length }}</h3>
+          <h3>{{ 'Pending invitations' | t }} · {{ t.invitations.length }}</h3>
           @if (t.invitations.length === 0) {
-            <p class="faint small pad">No pending invitations.</p>
+            <p class="faint small pad">{{ 'No pending invitations.' | t }}</p>
           } @else {
             <table class="table dense">
-              <thead><tr><th>Email</th><th>Role</th><th>Invited by</th><th>Expires</th><th></th></tr></thead>
+              <thead><tr><th>{{ 'Email' | t }}</th><th>{{ 'Role' | t }}</th><th>{{ 'Invited by' | t }}</th><th>{{ 'Expires' | t }}</th><th></th></tr></thead>
               <tbody>
                 @for (i of t.invitations; track i.id) {
                   <tr>
                     <td>{{ i.email }}</td>
                     <td>{{ roleNames[i.role] }}</td>
                     <td class="faint">{{ i.invitedBy }}</td>
-                    <td class="faint">{{ i.expiresAt | date: 'mediumDate' }}</td>
+                    <td class="faint">{{ i.expiresAt | ldate }}</td>
                     <td class="acts">
                       <button class="btn btn-sm btn-ghost" type="button" (click)="newLink(i)" [disabled]="busy()"
-                              title="The old link stops working">New link</button>
-                      <button class="btn btn-sm btn-ghost btn-danger" type="button" (click)="revoke(i)" [disabled]="busy()">Revoke</button>
+                              [title]="'The old link stops working' | t">{{ 'New link' | t }}</button>
+                      <button class="btn btn-sm btn-ghost btn-danger" type="button" (click)="revoke(i)" [disabled]="busy()">{{ 'Revoke' | t }}</button>
                     </td>
                   </tr>
                 }
@@ -122,7 +123,7 @@ import { ErrorState, LoadingState } from '../../shared/ui/states';
           }
         </section>
       } @else {
-        <p class="faint small">Only the owner or an admin can invite people or change roles.</p>
+        <p class="faint small">{{ 'Only the owner or an admin can invite people or change roles.' | t }}</p>
       }
     }
   `,
@@ -147,6 +148,7 @@ import { ErrorState, LoadingState } from '../../shared/ui/states';
   `,
 })
 export class TeamPanel {
+  private readonly i18n = inject(I18n);
   private readonly http = inject(HttpClient);
   private readonly auth = inject(AuthService);
   private readonly confirm = inject(ConfirmService);
@@ -171,9 +173,9 @@ export class TeamPanel {
     const b = this.billing.value();
     if (!b) return '';
     if (b.hasSubscription && b.status !== 'expired' && b.interval) {
-      return `Each user is a seat: a new member adds ${formatMoney(PLAN.pricePerSeat[b.interval], PLAN.currency)} per ${b.interval} (prorated from the next bill).`;
+      return t('Each user is a seat: a new member adds {price} per {interval} (prorated from the next bill).', { price: this.i18n.money(PLAN.pricePerSeat[b.interval], PLAN.currency), interval: t(b.interval === 'year' ? 'year' : 'month') });
     }
-    return 'Each user will be a paid seat once you subscribe; nothing is charged during the trial.';
+    return t('Each user will be a paid seat once you subscribe; nothing is charged during the trial.');
   });
 
   protected val(e: Event): string {
@@ -187,7 +189,7 @@ export class TeamPanel {
   protected async invite(): Promise<void> {
     const check = inviteSchema.safeParse({ email: this.email(), role: this.role() });
     if (!check.success) {
-      this.error.set(check.error.issues[0]?.message ?? 'Invalid invitation.');
+      this.error.set(check.error.issues[0]?.message ?? t('Invalid invitation.'));
       return;
     }
     await this.run(async () => {
@@ -211,7 +213,7 @@ export class TeamPanel {
       await navigator.clipboard.writeText(link);
       this.copied.set(true);
     } catch {
-      this.error.set('Copying is blocked by the browser; select the link and copy it by hand.');
+      this.error.set(t('Copying is blocked by the browser; select the link and copy it by hand.'));
     }
   }
 
@@ -228,23 +230,23 @@ export class TeamPanel {
 
   protected async remove(m: MemberDto): Promise<void> {
     const ok = await this.confirm.ask({
-      title: `Remove ${m.name}?`,
-      message: `${m.name} loses access to this company at once. Their projects and drawings stay in the company.`,
-      confirmLabel: 'Remove',
+      title: t('Remove {name}?', { name: m.name }),
+      message: t('{name} loses access to this company at once. Their projects and drawings stay in the company.', { name: m.name }),
+      confirmLabel: t('Remove'),
       danger: true,
     });
     if (!ok) return;
     await this.run(async () => {
       const r = await firstValueFrom(this.http.delete<{ seatsError: string | null }>(`/api/team/members/${m.userId}`));
-      if (r.seatsError) this.error.set(r.seatsError);
+      if (r.seatsError) this.error.set(tx(r.seatsError));
     });
   }
 
   protected async transfer(m: MemberDto): Promise<void> {
     const ok = await this.confirm.ask({
-      title: `Make ${m.name} the owner?`,
-      message: `${m.name} becomes the owner of the company and you become an admin. Only the new owner can undo this.`,
-      confirmLabel: 'Transfer ownership',
+      title: t('Make {name} the owner?', { name: m.name }),
+      message: t('{name} becomes the owner of the company and you become an admin. Only the new owner can undo this.', { name: m.name }),
+      confirmLabel: t('Transfer ownership'),
       danger: true,
     });
     if (!ok) return;
@@ -255,11 +257,11 @@ export class TeamPanel {
   }
 
   protected async leave(): Promise<void> {
-    const name = this.auth.session()?.organization.name ?? 'this company';
+    const name = this.auth.session()?.organization.name ?? t('this company');
     const ok = await this.confirm.ask({
-      title: `Leave ${name}?`,
-      message: 'You lose access to its projects. You will be signed out; sign in again to open your other companies, if any.',
-      confirmLabel: 'Leave company',
+      title: t('Leave {name}?', { name }),
+      message: t('You lose access to its projects. You will be signed out; sign in again to open your other companies, if any.'),
+      confirmLabel: t('Leave company'),
       danger: true,
     });
     if (!ok) return;

@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
-import { DatePipe } from '@angular/common';
 import { HttpClient, httpResource } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -7,8 +6,11 @@ import { PAST_DUE_GRACE_DAYS, PLAN, daysUntil, formatMoney, type BillingDto, typ
 import { errorMessage, toApiError } from '../../core/api-error';
 import { AuthService } from '../../core/auth.service';
 import { ErrorState, LoadingState } from '../../shared/ui/states';
+import { I18N_PIPES } from '../../core/i18n/t.pipe';
+import type { TKey } from '../../core/i18n/sq';
+import { I18n, t, tx } from '../../core/i18n/i18n.service';
 
-const STATUS_TEXT: Record<BillingDto['status'], string> = {
+const STATUS_TEXT: Record<BillingDto['status'], TKey> = {
   trialing: 'Free trial',
   active: 'Active',
   past_due: 'Payment failed',
@@ -19,92 +21,91 @@ const STATUS_TEXT: Record<BillingDto['status'], string> = {
 /** Subscription status, subscribe / manage buttons, and (development only) the simulated checkout and portal. */
 @Component({
   selector: 'app-billing-panel',
-  imports: [DatePipe, LoadingState, ErrorState],
+  imports: [I18N_PIPES, LoadingState, ErrorState],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (billing.error(); as err) {
       <app-error-state [message]="message(err)" (retry)="billing.reload()" />
     } @else if (!billing.hasValue()) {
-      <app-loading label="Loading billing…" />
+      <app-loading [label]="'Loading billing…' | t" />
     } @else {
       @let b = billing.value();
-      @if (error(); as e) { <div class="banner banner-error" role="alert">{{ e }}</div> }
+      @if (error(); as e) { <div class="banner banner-error" role="alert">{{ e | tx }}</div> }
 
       @if (b.provider === 'dev' && devCheckout()) {
         <section class="card dev">
-          <h3>Test checkout <span class="tag">development – no real payment</span></h3>
-          <p>This stands in for the payment provider's checkout page. Completing it sends a signed test webhook through the
-            same code path as a real payment.</p>
+          <h3>{{ 'Test checkout' | t }} <span class="tag">{{ 'development – no real payment' | t }}</span></h3>
+          <p>{{ 'This stands in for the payment provider\’s checkout page. Completing it sends a signed test webhook through the same code path as a real payment.' | t }}</p>
           <div class="row">
-            <button class="btn btn-primary" type="button" (click)="completeDevCheckout()" [disabled]="busy()">Complete test payment</button>
-            <button class="btn" type="button" (click)="clearParams()">Cancel</button>
+            <button class="btn btn-primary" type="button" (click)="completeDevCheckout()" [disabled]="busy()">{{ 'Complete test payment' | t }}</button>
+            <button class="btn" type="button" (click)="clearParams()">{{ 'Cancel' | t }}</button>
           </div>
         </section>
       }
       @if (b.provider === 'dev' && devPortal() && b.hasSubscription) {
         <section class="card dev">
-          <h3>Test customer portal <span class="tag">development – no real payment</span></h3>
-          <p>Simulate what would happen in the provider's portal or after a payment attempt.</p>
+          <h3>{{ 'Test customer portal' | t }} <span class="tag">{{ 'development – no real payment' | t }}</span></h3>
+          <p>{{ 'Simulate what would happen in the provider\’s portal or after a payment attempt.' | t }}</p>
           <div class="row wrap">
-            <button class="btn btn-sm" type="button" (click)="simulate('cancel')" [disabled]="busy()">Cancel at period end</button>
-            <button class="btn btn-sm" type="button" (click)="simulate('resume')" [disabled]="busy()">Resume</button>
-            <button class="btn btn-sm" type="button" (click)="simulate('payment_failed')" [disabled]="busy()">Payment fails</button>
-            <button class="btn btn-sm" type="button" (click)="simulate('payment_succeeded')" [disabled]="busy()">Payment succeeds</button>
-            <button class="btn btn-sm btn-danger" type="button" (click)="simulate('end_now')" [disabled]="busy()">End subscription now</button>
-            <button class="btn btn-sm btn-ghost" type="button" (click)="clearParams()">Close</button>
+            <button class="btn btn-sm" type="button" (click)="simulate('cancel')" [disabled]="busy()">{{ 'Cancel at period end' | t }}</button>
+            <button class="btn btn-sm" type="button" (click)="simulate('resume')" [disabled]="busy()">{{ 'Resume' | t }}</button>
+            <button class="btn btn-sm" type="button" (click)="simulate('payment_failed')" [disabled]="busy()">{{ 'Payment fails' | t }}</button>
+            <button class="btn btn-sm" type="button" (click)="simulate('payment_succeeded')" [disabled]="busy()">{{ 'Payment succeeds' | t }}</button>
+            <button class="btn btn-sm btn-danger" type="button" (click)="simulate('end_now')" [disabled]="busy()">{{ 'End subscription now' | t }}</button>
+            <button class="btn btn-sm btn-ghost" type="button" (click)="clearParams()">{{ 'Close' | t }}</button>
           </div>
         </section>
       }
 
       @if (b.provider === 'none') {
-        <section class="card off"><h3>Billing is not enabled on this server</h3>
-          <p class="faint small">This is a test installation: every company has full access and nothing is charged.</p></section>
+        <section class="card off"><h3>{{ 'Billing is not enabled on this server' | t }}</h3>
+          <p class="faint small">{{ 'This is a test installation: every company has full access and nothing is charged.' | t }}</p></section>
       }
       <div class="grid">
         <section class="card status">
-          <h3>Subscription</h3>
+          <h3>{{ 'Subscription' | t }}</h3>
           <dl>
-            <dt>Status</dt><dd><span class="pill" [class]="'pill ' + b.status">{{ statusText[b.status] }}</span></dd>
+            <dt>{{ 'Status' | t }}</dt><dd><span class="pill" [class]="'pill ' + b.status">{{ statusText[b.status] | t }}</span></dd>
             @if (b.status === 'trialing') {
-              <dt>Trial ends</dt><dd>{{ b.trialEndsAt | date: 'mediumDate' }} ({{ days(b.trialEndsAt) }} day(s) left)</dd>
+              <dt>{{ 'Trial ends' | t }}</dt><dd>{{ b.trialEndsAt | ldate }} ({{ '{n} day(s) left' | t: { n: days(b.trialEndsAt) } }})</dd>
             }
-            @if (b.interval) { <dt>Billing</dt><dd>{{ b.interval === 'year' ? 'Yearly' : 'Monthly' }}</dd> }
+            @if (b.interval) { <dt>{{ 'Billing' | t }}</dt><dd>{{ (b.interval === 'year' ? 'Yearly' : 'Monthly') | t }}</dd> }
             @if (b.currentPeriodEnd && b.status !== 'expired') {
-              <dt>{{ b.cancelAtPeriodEnd ? 'Ends on' : 'Next payment' }}</dt><dd>{{ b.currentPeriodEnd | date: 'mediumDate' }}</dd>
+              <dt>{{ (b.cancelAtPeriodEnd ? 'Ends on' : 'Next payment') | t }}</dt><dd>{{ b.currentPeriodEnd | ldate }}</dd>
             }
             @if (b.status === 'past_due' && b.pastDueSince) {
-              <dt>Full access until</dt><dd>{{ graceEnd(b.pastDueSince) | date: 'mediumDate' }}</dd>
+              <dt>{{ 'Full access until' | t }}</dt><dd>{{ graceEnd(b.pastDueSince) | ldate }}</dd>
             }
-            <dt>Users</dt><dd>{{ b.members }} (billed per user{{ b.hasSubscription ? ', ' + b.seats + ' seat(s) on the subscription' : '' }})</dd>
-            <dt>Access</dt><dd>{{ b.access === 'full' ? 'Full' : 'Read-only: view and export only' }}</dd>
+            <dt>{{ 'Users' | t }}</dt><dd>{{ b.members }} ({{ 'billed per user' | t }}{{ b.hasSubscription ? ', ' + ('{n} seat(s) on the subscription' | t: { n: b.seats }) : '' }})</dd>
+            <dt>{{ 'Access' | t }}</dt><dd>{{ (b.access === 'full' ? 'Full' : 'Read-only: view and export only') | t }}</dd>
           </dl>
           @if (b.hasSubscription && canManage()) {
-            <div class="row"><button class="btn" type="button" (click)="portal()" [disabled]="busy()">Manage billing</button></div>
-            <p class="faint small">Change payment method, download invoices, switch plan or cancel.</p>
+            <div class="row"><button class="btn" type="button" (click)="portal()" [disabled]="busy()">{{ 'Manage billing' | t }}</button></div>
+            <p class="faint small">{{ 'Change payment method, download invoices, switch plan or cancel.' | t }}</p>
           }
         </section>
 
         @if (canSubscribe()) {
           <section class="card plans">
-            <h3>{{ b.access === 'read-only' ? 'Renew to keep editing' : 'Subscribe' }}</h3>
-            <p class="faint small">One plan with everything included, priced per user. Prices are net; VAT is added at checkout where it applies.</p>
+            <h3>{{ (b.access === 'read-only' ? 'Renew to keep editing' : 'Subscribe') | t }}</h3>
+            <p class="faint small">{{ 'One plan with everything included, priced per user. Prices are net; VAT is added at checkout where it applies.' | t }}</p>
             <div class="options">
               @for (i of intervals; track i) {
                 <div class="option">
                   <div class="price">{{ price(i) }}</div>
-                  <div class="faint small">per user / {{ i === 'year' ? 'year (2 months free)' : 'month' }}</div>
-                  <div class="faint small">{{ b.members }} user(s): {{ total(i, b.members) }}</div>
+                  <div class="faint small">{{ (i === 'year' ? 'per user / year (2 months free)' : 'per user / month') | t }}</div>
+                  <div class="faint small">{{ '{n} user(s): {total}' | t: { n: b.members, total: total(i, b.members) } }}</div>
                   <button class="btn" [class.btn-primary]="i === 'year'" type="button" (click)="checkout(i)" [disabled]="busy() || !canManage()">
-                    Subscribe {{ i === 'year' ? 'yearly' : 'monthly' }}</button>
+                    {{ (i === 'year' ? 'Subscribe yearly' : 'Subscribe monthly') | t }}</button>
                 </div>
               }
             </div>
-            @if (!canManage()) { <p class="faint small">Ask the owner or an admin of your company to subscribe.</p> }
-            @if (b.provider === 'dev') { <p class="faint small">Development mode: checkout is simulated, no payment is taken.</p> }
+            @if (!canManage()) { <p class="faint small">{{ 'Ask the owner or an admin of your company to subscribe.' | t }}</p> }
+            @if (b.provider === 'dev') { <p class="faint small">{{ 'Development mode: checkout is simulated, no payment is taken.' | t }}</p> }
           </section>
         }
       </div>
-      <p class="faint small">Your data is never deleted because of billing. Without an active subscription, projects stay viewable and exportable.</p>
+      <p class="faint small">{{ 'Your data is never deleted because of billing. Without an active subscription, projects stay viewable and exportable.' | t }}</p>
     }
   `,
   styles: `
@@ -134,6 +135,7 @@ const STATUS_TEXT: Record<BillingDto['status'], string> = {
   `,
 })
 export class BillingPanel {
+  private readonly i18n = inject(I18n);
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
   private readonly auth = inject(AuthService);
@@ -161,10 +163,10 @@ export class BillingPanel {
     return new Date(Date.parse(iso) + PAST_DUE_GRACE_DAYS * 86_400_000);
   }
   protected price(i: BillingInterval): string {
-    return formatMoney(PLAN.pricePerSeat[i], PLAN.currency).replace('.00', '');
+    return this.i18n.money(PLAN.pricePerSeat[i], PLAN.currency).replace(/[.,]00(?=\D|$)/, '');
   }
   protected total(i: BillingInterval, users: number): string {
-    return `${formatMoney(PLAN.pricePerSeat[i] * Math.max(1, users), PLAN.currency)} / ${i}`;
+    return `${this.i18n.money(PLAN.pricePerSeat[i] * Math.max(1, users), PLAN.currency)} / ${t(i === 'year' ? 'year' : 'month')}`;
   }
 
   protected async checkout(interval: BillingInterval): Promise<void> {

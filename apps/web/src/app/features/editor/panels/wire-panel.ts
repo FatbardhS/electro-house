@@ -16,69 +16,71 @@ import {
 } from '@electro/shared';
 import { DrawingStore } from '../state/drawing.store';
 import { ToolsStore } from '../state/tools.store';
+import { I18N_PIPES } from '../../../core/i18n/t.pipe';
+import { t } from '../../../core/i18n/i18n.service';
 
 /** Properties of one selected wire: cable data, measured length and connections. */
 @Component({
   selector: 'app-wire-panel',
+  imports: [I18N_PIPES],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (wire(); as w) {
       <div class="len">
         <div class="big mono">{{ length() }}</div>
-        <div class="faint small">Measured route length{{ calibration() ? '' : ' (calibrate the floor to see metres)' }}.
-          Installation allowances are added in the material list.</div>
+        <div class="faint small">{{ (calibration() ? 'Measured route length.' : 'Measured route length (calibrate the floor to see metres).') | t }}
+          {{ 'Installation allowances are added in the material list.' | t }}</div>
       </div>
-      <label class="f"><span>Label</span>
+      <label class="f"><span>{{ 'Label' | t }}</span>
         <input class="input" [value]="w.label ?? ''" maxlength="40" placeholder="e.g. W1" (change)="setLabel($event)" /></label>
-      <label class="f"><span>Circuit</span>
+      <label class="f"><span>{{ 'Circuit' | t }}</span>
         <select class="input" (change)="drawing.assignSelectionToCircuit(val($event) || null)">
-          <option value="" [selected]="!w.circuitId">— not assigned —</option>
+          <option value="" [selected]="!w.circuitId">— {{ 'not assigned' | t }} —</option>
           @for (k of drawing.circuits(); track k.id) { <option [value]="k.id" [selected]="k.id === w.circuitId">{{ k.number }} · {{ k.name }}</option> }
         </select></label>
       <div class="two">
-        <label class="f"><span>Cable type</span>
+        <label class="f"><span>{{ 'Cable type' | t }}</span>
           <select class="input" (change)="setCable({ cableType: $any(val($event)) || undefined })">
             <option value="">—</option>
             @for (t of cableTypes; track t) { <option [value]="t" [selected]="w.cable.cableType === t">{{ t }}</option> }
           </select></label>
-        <label class="f"><span>Conductors</span>
+        <label class="f"><span>{{ 'Conductors' | t }}</span>
           <input class="input mono" type="number" min="1" max="61" [value]="w.cable.conductors ?? ''" (change)="setCable({ conductors: num($event) })" /></label>
       </div>
       <div class="two">
-        <label class="f"><span>Cross-section (mm²)</span>
+        <label class="f"><span>{{ 'Cross-section (mm²)' | t }}</span>
           <select class="input" (change)="setCable({ crossSectionMm2: num($event) })">
             <option value="">—</option>
             @for (s of sections; track s) { <option [value]="s" [selected]="w.cable.crossSectionMm2 === s">{{ s }}</option> }
           </select></label>
-        <label class="f"><span>Voltage (V)</span>
+        <label class="f"><span>{{ 'Voltage (V)' | t }}</span>
           <input class="input mono" type="number" min="1" max="1000" [value]="w.cable.voltage ?? ''" (change)="setCable({ voltage: num($event) })" /></label>
       </div>
-      <label class="f"><span>Installation method</span>
+      <label class="f"><span>{{ 'Installation method' | t }}</span>
         <select class="input" (change)="setCable({ installMethod: $any(val($event)) || undefined })">
           <option value="">—</option>
           @for (m of methods; track m) { <option [value]="m" [selected]="w.cable.installMethod === m">{{ m }}</option> }
         </select></label>
-      <div class="f"><span>Colour and line</span>
+      <div class="f"><span>{{ 'Colour and line' | t }}</span>
         <div class="swatches">
           @for (c of colors; track c) {
-            <button type="button" class="sw" [style.background]="c" [class.on]="w.cable.color === c" (click)="setCable({ color: c })" [attr.aria-label]="'Colour ' + c"></button>
+            <button type="button" class="sw" [style.background]="c" [class.on]="w.cable.color === c" (click)="setCable({ color: c })" [attr.aria-label]="'Colour {c}' | t: { c: c }"></button>
           }
-          <select class="input style" (change)="setCable({ lineStyle: $any(val($event)) })" aria-label="Line style">
+          <select class="input style" (change)="setCable({ lineStyle: $any(val($event)) })" [attr.aria-label]="'Line style' | t">
             @for (s of styles; track s) { <option [value]="s" [selected]="w.cable.lineStyle === s">{{ s }}</option> }
           </select>
         </div>
       </div>
       <div class="ends">
-        <div class="end"><span class="faint">From</span> <span>{{ endName(w.from) }}</span>
-          @if (w.from.componentId) { <button class="btn btn-sm btn-ghost" type="button" (click)="disconnect('from')">Disconnect</button> }</div>
-        <div class="end"><span class="faint">To</span> <span>{{ endName(w.to) }}</span>
-          @if (w.to.componentId) { <button class="btn btn-sm btn-ghost" type="button" (click)="disconnect('to')">Disconnect</button> }</div>
+        <div class="end"><span class="faint">{{ 'From' | t }}</span> <span>{{ endName(w.from) }}</span>
+          @if (w.from.componentId) { <button class="btn btn-sm btn-ghost" type="button" (click)="disconnect('from')">{{ 'Disconnect' | t }}</button> }</div>
+        <div class="end"><span class="faint">{{ 'To' | t }}</span> <span>{{ endName(w.to) }}</span>
+          @if (w.to.componentId) { <button class="btn btn-sm btn-ghost" type="button" (click)="disconnect('to')">{{ 'Disconnect' | t }}</button> }</div>
       </div>
-      <label class="f"><span>Description</span>
+      <label class="f"><span>{{ 'Description' | t }}</span>
         <textarea class="input" rows="2" maxlength="2000" [value]="w.description ?? ''" (change)="setDescription($event)"></textarea></label>
-      <p class="faint small">Drag the round handles to move bends or ends (drop an end on a component to connect it),
-        drag a small handle to add a bend, double-click a bend to remove it.</p>
-      <div class="actions"><button class="btn btn-sm btn-danger" type="button" (click)="drawing.deleteSelected()">Delete wire</button></div>
+      <p class="faint small">{{ 'Drag the round handles to move bends or ends (drop an end on a component to connect it), drag a small handle to add a bend, double-click a bend to remove it.' | t }}</p>
+      <div class="actions"><button class="btn btn-sm btn-danger" type="button" (click)="drawing.deleteSelected()">{{ 'Delete wire' | t }}</button></div>
     }
   `,
   styles: `
@@ -143,24 +145,24 @@ export class WirePanel {
     const cable = { ...w.cable, ...patch };
     for (const k of Object.keys(cable) as (keyof CableDto)[]) if (cable[k] === undefined) delete cable[k];
     if (!cableSchema.safeParse(cable).success) return;
-    this.drawing.updateWires([{ ...w, cable }], 'Change cable');
+    this.drawing.updateWires([{ ...w, cable }], t('Change cable'));
     this.tools.wireCable.set(cable); // new wires use the last cable chosen
   }
 
   protected setLabel(e: Event): void {
     const w = this.wire();
-    if (w) this.drawing.updateWires([{ ...w, label: this.val(e) || null }], 'Rename wire');
+    if (w) this.drawing.updateWires([{ ...w, label: this.val(e) || null }], t('Rename wire'));
   }
 
   protected setDescription(e: Event): void {
     const w = this.wire();
-    if (w) this.drawing.updateWires([{ ...w, description: this.val(e) || null }], 'Edit wire description');
+    if (w) this.drawing.updateWires([{ ...w, description: this.val(e) || null }], t('Edit wire description'));
   }
 
   protected disconnect(which: 'from' | 'to'): void {
     const w: WireDto | null = this.wire();
     if (!w) return;
     const p = endPosition(w[which], this.drawing.lookup());
-    this.drawing.updateWires([{ ...w, [which]: { componentId: null, portId: null, x: p.x, y: p.y } }], 'Disconnect wire');
+    this.drawing.updateWires([{ ...w, [which]: { componentId: null, portId: null, x: p.x, y: p.y } }], t('Disconnect wire'));
   }
 }

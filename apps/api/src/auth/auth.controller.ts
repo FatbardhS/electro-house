@@ -1,7 +1,7 @@
 import { Body, Controller, Get, HttpCode, Post, Res } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
-import { signInSchema, signUpSchema, switchOrganizationSchema, type SessionDto, type SignInInput, type SignUpInput } from '@electro/shared';
+import { setLanguageSchema, signInSchema, signUpSchema, switchOrganizationSchema, type Language, type SessionDto, type SignInInput, type SignUpInput } from '@electro/shared';
 import { ZodPipe } from '../common/zod-validation.pipe.js';
 import { setSessionCookie } from './session-cookie.js';
 import { AuthService } from './auth.service.js';
@@ -55,6 +55,14 @@ export class AuthController {
   @HttpCode(200)
   switch(@Auth() auth: AuthContext, @Body(new ZodPipe(switchOrganizationSchema)) body: { organizationId: string }): Promise<SessionDto> {
     return this.auth.switchOrganization(auth, body.organizationId);
+  }
+
+  /** Saves the interface language on the account (works in read-only mode too). */
+  @Post('language')
+  @AllowReadOnly()
+  @HttpCode(204)
+  async setLanguage(@Auth() auth: AuthContext, @Body(new ZodPipe(setLanguageSchema)) body: { language: Language }): Promise<void> {
+    await this.auth.setLanguage(auth.userId, body.language);
   }
 
   private setCookie(res: Response, token: string, expiresAt: Date) {

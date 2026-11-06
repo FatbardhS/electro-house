@@ -9,6 +9,8 @@ export interface UserDto {
   id: string;
   email: string;
   name: string;
+  /** Interface language chosen by the user. */
+  language: 'sq' | 'en';
 }
 
 export interface OrganizationDto {

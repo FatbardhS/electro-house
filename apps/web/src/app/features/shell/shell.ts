@@ -2,26 +2,29 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { summaryBanner } from '@electro/shared';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
+import { I18n } from '../../core/i18n/i18n.service';
+import { I18N_PIPES } from '../../core/i18n/t.pipe';
 import { BrandMark } from '../../shared/ui/brand-mark';
+import { LangSwitch } from '../../shared/ui/lang-switch';
 
 @Component({
   selector: 'app-shell',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, BrandMark],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, BrandMark, LangSwitch, I18N_PIPES],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <header class="topbar">
       <a class="brand" routerLink="/clients"><app-brand-mark [size]="20" /> Electro House</a>
       <nav>
-        <a routerLink="/clients" routerLinkActive="active">Clients</a>
-        <a routerLink="/projects" routerLinkActive="active">Projects</a>
-        <a routerLink="/settings" routerLinkActive="active">Settings</a>
+        <a routerLink="/clients" routerLinkActive="active">{{ 'Clients' | t }}</a>
+        <a routerLink="/projects" routerLinkActive="active">{{ 'Projects' | t }}</a>
+        <a routerLink="/settings" routerLinkActive="active">{{ 'Settings' | t }}</a>
       </nav>
       <div class="spacer"></div>
       @if (auth.session(); as s) {
         <div class="who">
           <span>{{ s.user.name }}</span>
           @if (s.organizations.length > 1) {
-            <select class="switcher" (change)="switchTo($any($event.target).value)" aria-label="Company">
+            <select class="switcher" (change)="switchTo($any($event.target).value)" [attr.aria-label]="'Company' | t">
               @for (o of s.organizations; track o.id) { <option [value]="o.id" [selected]="o.id === s.organization.id">{{ o.name }}</option> }
             </select>
           } @else {
@@ -29,12 +32,13 @@ import { BrandMark } from '../../shared/ui/brand-mark';
           }
         </div>
       }
-      <button class="btn btn-sm btn-ghost" type="button" (click)="auth.signOut()">Sign out</button>
+      <app-lang-switch />
+      <button class="btn btn-sm btn-ghost" type="button" (click)="auth.signOut()">{{ 'Sign out' | t }}</button>
     </header>
     @if (banner(); as b) {
       <div class="billing-banner" [class]="'billing-banner ' + b.kind" role="status">
         <span>{{ b.text }}</span>
-        @if (canManage()) { <a routerLink="/settings" [queryParams]="{ tab: 'billing' }">Billing</a> }
+        @if (canManage()) { <a routerLink="/settings" [queryParams]="{ tab: 'billing' }">{{ 'Billing' | t }}</a> }
       </div>
     }
     <main><router-outlet /></main>
@@ -72,9 +76,13 @@ import { BrandMark } from '../../shared/ui/brand-mark';
 })
 export class Shell {
   protected readonly auth = inject(AuthService);
+  private readonly i18n = inject(I18n);
   protected readonly banner = computed(() => {
     const billing = this.auth.session()?.organization.billing;
-    return billing ? summaryBanner(billing) : null;
+    if (!billing) return null;
+    const b = summaryBanner(billing);
+    this.i18n.lang(); // re-translate on language change
+    return b ? { ...b, text: this.i18n.tx(b.text) } : null;
   });
   protected readonly canManage = computed(() => this.auth.session()?.organization.role !== 'MEMBER');
 

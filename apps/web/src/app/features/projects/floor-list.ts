@@ -6,57 +6,59 @@ import { Api } from '../../core/api';
 import { toApiError } from '../../core/api-error';
 import { ConfirmService } from '../../shared/ui/confirm-dialog';
 import { EmptyState } from '../../shared/ui/states';
+import { I18N_PIPES } from '../../core/i18n/t.pipe';
+import { I18n } from '../../core/i18n/i18n.service';
 
 /** Floor management for a project: add, rename, reorder, delete, and upload/replace each floor's plan PDF. */
 @Component({
   selector: 'app-floor-list',
-  imports: [FormsModule, RouterLink, EmptyState],
+  imports: [I18N_PIPES, FormsModule, RouterLink, EmptyState],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    @if (error(); as e) { <div class="banner banner-error" role="alert">{{ e }}</div> }
+    @if (error(); as e) { <div class="banner banner-error" role="alert">{{ e | tx }}</div> }
 
     @if (floors().length === 0) {
-      <app-empty-state heading="No floors yet"
-                       text="Add each floor of the building, then upload its architectural plan PDF." />
+      <app-empty-state [heading]="'No floors yet' | t"
+                       [text]="'Add each floor of the building, then upload its architectural plan PDF.' | t" />
     } @else {
       <ul class="floors">
         @for (f of floors(); track f.id; let i = $index, last = $last) {
           <li class="floor">
             <div class="order">
               <button class="btn btn-sm btn-icon btn-ghost" type="button" [disabled]="i === 0 || busy()"
-                      (click)="move(i, -1)" title="Move up" aria-label="Move {{ f.name }} up">↑</button>
+                      (click)="move(i, -1)" [title]="'Move up' | t" [attr.aria-label]="'Move {name} up' | t: { name: f.name }">↑</button>
               <button class="btn btn-sm btn-icon btn-ghost" type="button" [disabled]="last || busy()"
-                      (click)="move(i, 1)" title="Move down" aria-label="Move {{ f.name }} down">↓</button>
+                      (click)="move(i, 1)" [title]="'Move down' | t" [attr.aria-label]="'Move {name} down' | t: { name: f.name }">↓</button>
             </div>
 
             <div class="info">
               @if (renamingId() === f.id) {
                 <form class="rename" (ngSubmit)="saveRename(f)">
-                  <input class="input" name="rename" [(ngModel)]="renameValue" aria-label="Floor name" autofocus
+                  <input class="input" name="rename" [(ngModel)]="renameValue" [attr.aria-label]="'Floor name' | t" autofocus
                          (keydown.escape)="renamingId.set(null)" />
-                  <button class="btn btn-sm btn-primary" type="submit">Save</button>
-                  <button class="btn btn-sm" type="button" (click)="renamingId.set(null)">Cancel</button>
+                  <button class="btn btn-sm btn-primary" type="submit">{{ 'Save' | t }}</button>
+                  <button class="btn btn-sm" type="button" (click)="renamingId.set(null)">{{ 'Cancel' | t }}</button>
                 </form>
               } @else {
                 <div class="name">{{ f.name }}</div>
               }
               <div class="plan">
                 @if (uploading()[f.id] !== undefined) {
-                  <span class="muted">Uploading… {{ (uploading()[f.id]! * 100).toFixed(0) }}%</span>
+                  <span class="muted">{{ 'Uploading… {p}%' | t: { p: (uploading()[f.id]! * 100).toFixed(0) } }}</span>
                   <div class="progress"><div [style.width.%]="uploading()[f.id]! * 100"></div></div>
                 } @else if (f.planFile) {
                   <span class="muted">{{ f.planFile.originalName }}</span>
-                  <span class="faint">· {{ f.planFile.pageCount }} page{{ f.planFile.pageCount === 1 ? '' : 's' }}
-                    · {{ (f.planFile.sizeBytes / 1024 / 1024).toFixed(1) }} MB</span>
+                  <span class="faint">· {{ (f.planFile.pageCount === 1 ? '1 page' : '{n} pages') | t: { n: f.planFile.pageCount } }}
+                    · {{ (f.planFile.sizeBytes / 1024 / 1024) | num: 1 }} MB</span>
                   @if (f.calibration && !f.calibrationNeedsCheck) {
-                    <span class="badge badge-completed">Calibrated</span>
+                    <span class="badge badge-completed">{{ 'Calibrated' | t }}</span>
                   } @else if (f.calibrationNeedsCheck) {
-                    <span class="badge badge-in_progress">Check scale</span>
+                    <span class="badge badge-in_progress">{{ 'Check scale' | t }}</span>
                   } @else {
-                    <span class="badge">Not calibrated</span>
+                    <span class="badge">{{ 'Not calibrated' | t }}</span>
                   }
                 } @else {
-                  <span class="faint">No plan uploaded</span>
+                  <span class="faint">{{ 'No plan uploaded' | t }}</span>
                 }
               </div>
             </div>
@@ -64,12 +66,12 @@ import { EmptyState } from '../../shared/ui/states';
             <div class="actions">
               <input #file type="file" accept="application/pdf,.pdf" hidden (change)="upload(f, file)" />
               <button class="btn btn-sm" type="button" [disabled]="uploading()[f.id] !== undefined"
-                      (click)="file.click()">{{ f.planFile ? 'Replace PDF' : 'Upload PDF' }}</button>
+                      (click)="file.click()">{{ (f.planFile ? 'Replace PDF' : 'Upload PDF') | t }}</button>
               @if (f.planFile) {
-                <a class="btn btn-sm btn-primary" [routerLink]="['/projects', projectId(), 'floors', f.id]">Open editor</a>
+                <a class="btn btn-sm btn-primary" [routerLink]="['/projects', projectId(), 'floors', f.id]">{{ 'Open editor' | t }}</a>
               }
-              <button class="btn btn-sm btn-ghost" type="button" (click)="startRename(f)">Rename</button>
-              <button class="btn btn-sm btn-ghost btn-danger" type="button" (click)="remove(f)">Delete</button>
+              <button class="btn btn-sm btn-ghost" type="button" (click)="startRename(f)">{{ 'Rename' | t }}</button>
+              <button class="btn btn-sm btn-ghost btn-danger" type="button" (click)="remove(f)">{{ 'Delete' | t }}</button>
             </div>
           </li>
         }
@@ -78,15 +80,15 @@ import { EmptyState } from '../../shared/ui/states';
 
     <form class="add" (ngSubmit)="add()">
       <select class="input" name="preset" [ngModel]="selectedPreset()" (ngModelChange)="choosePreset($event)"
-              aria-label="Floor name preset">
+              [attr.aria-label]="'Floor name preset' | t">
         @for (p of availablePresets(); track p) { <option [value]="p">{{ p }}</option> }
-        <option value="__custom">Custom name…</option>
+        <option value="__custom">{{ 'Custom name…' | t }}</option>
       </select>
       @if (selectedPreset() === '__custom') {
-        <input class="input" name="custom" [(ngModel)]="newCustom" placeholder="e.g. Garage, Mezzanine"
-               aria-label="Custom floor name" maxlength="80" />
+        <input class="input" name="custom" [(ngModel)]="newCustom" [placeholder]="'e.g. Garage, Mezzanine' | t"
+               [attr.aria-label]="'Custom floor name' | t" maxlength="80" />
       }
-      <button class="btn" type="submit" [disabled]="busy()">+ Add floor</button>
+      <button class="btn" type="submit" [disabled]="busy()">+ {{ 'Add floor' | t }}</button>
     </form>
   `,
   styles: `
@@ -112,6 +114,7 @@ import { EmptyState } from '../../shared/ui/states';
 export class FloorList {
   private readonly api = inject(Api);
   private readonly confirm = inject(ConfirmService);
+  private readonly i18n = inject(I18n);
 
   readonly projectId = input.required<string>();
   readonly floors = input.required<FloorDto[]>();
@@ -146,7 +149,7 @@ export class FloorList {
     const preset = this.selectedPreset();
     const name = (preset === '__custom' ? this.newCustom : preset).trim();
     if (!name) {
-      this.error.set('Enter a floor name.');
+      this.error.set(this.i18n.t('Enter a floor name.'));
       return;
     }
     await this.run(() => this.api.createFloor(this.projectId(), name));
@@ -174,9 +177,9 @@ export class FloorList {
 
   protected async remove(f: FloorDto): Promise<void> {
     const ok = await this.confirm.ask({
-      title: `Delete “${f.name}”?`,
-      message: 'The floor, its plan PDF and everything drawn on it will be deleted permanently.',
-      confirmLabel: 'Delete floor',
+      title: this.i18n.t('Delete “{name}”?', { name: f.name }),
+      message: this.i18n.t('The floor, its plan PDF and everything drawn on it will be deleted permanently.'),
+      confirmLabel: this.i18n.t('Delete floor'),
       danger: true,
     });
     if (ok) await this.run(() => this.api.deleteFloor(f.id));
@@ -188,16 +191,16 @@ export class FloorList {
     if (!file) return;
     this.error.set(null);
     if (file.size > MAX_PLAN_FILE_BYTES) {
-      this.error.set(`“${file.name}” is larger than ${MAX_PLAN_FILE_BYTES / 1024 / 1024} MB.`);
+      this.error.set(this.i18n.t('“{name}” is larger than {mb} MB.', { name: file.name, mb: MAX_PLAN_FILE_BYTES / 1024 / 1024 }));
       return;
     }
     if (f.planFile) {
       const ok = await this.confirm.ask({
-        title: 'Replace the floor plan?',
-        message:
-          'Everything drawn on this floor is kept. If the new PDF has a different scale or position, ' +
-          'you will be asked to check the calibration.',
-        confirmLabel: 'Replace PDF',
+        title: this.i18n.t('Replace the floor plan?'),
+        message: this.i18n.t(
+          'Everything drawn on this floor is kept. If the new PDF has a different scale or position, you will be asked to check the calibration.',
+        ),
+        confirmLabel: this.i18n.t('Replace PDF'),
       });
       if (!ok) return;
     }
@@ -206,7 +209,7 @@ export class FloorList {
       next: (e) => this.uploading.update((u) => ({ ...u, [f.id]: e.progress })),
       error: (err) => {
         this.clearUpload(f.id);
-        this.error.set(`Upload of “${file.name}” failed: ${toApiError(err).message}`);
+        this.error.set(this.i18n.t('Upload of “{name}” failed: {reason}', { name: file.name, reason: this.i18n.tx(toApiError(err).message) }));
       },
       complete: () => {
         this.clearUpload(f.id);

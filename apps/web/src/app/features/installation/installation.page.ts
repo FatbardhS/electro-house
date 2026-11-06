@@ -13,26 +13,28 @@ import { MaterialsView } from './materials-view';
 import { ExportDialog } from './export-dialog';
 import { ChecksView } from './checks-view';
 import { Modal } from '../../shared/ui/modal';
+import { I18N_PIPES } from '../../core/i18n/t.pipe';
+import type { TKey } from '../../core/i18n/sq';
 
 type Tab = 'circuits' | 'boards' | 'links' | 'totals' | 'materials' | 'checks' | 'rules';
 
 /** Electrical management of a whole project: circuits, boards, floor connections, calculations. */
 @Component({
   selector: 'app-installation-page',
-  imports: [RouterLink, LoadingState, ErrorState, CircuitsTable, BoardsView, LinksView, TotalsView, MaterialsView, ProfileForm, ExportDialog, Modal, ChecksView],
+  imports: [I18N_PIPES, RouterLink, LoadingState, ErrorState, CircuitsTable, BoardsView, LinksView, TotalsView, MaterialsView, ProfileForm, ExportDialog, Modal, ChecksView],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="page wide">
-      <a class="back" [routerLink]="['/projects', projectId()]">← {{ project.hasValue() ? project.value().name : 'Project' }}</a>
+      <a class="back" [routerLink]="['/projects', projectId()]">← {{ project.hasValue() ? project.value().name : ('Project' | t) }}</a>
       <div class="page-header">
         <div>
-          <h1>Circuits & calculations</h1>
-          <div class="subtitle">Values update from the floor plans. Loads and currents are estimates for planning; verify against your national standard.</div>
+          <h1>{{ 'Circuits & calculations' | t }}</h1>
+          <div class="subtitle">{{ 'Values update from the floor plans. Loads and currents are estimates for planning; verify against your national standard.' | t }}</div>
         </div>
-        <button class="btn btn-primary" type="button" (click)="exporting.set(true)" [disabled]="!data.hasValue()">Export PDF</button>
+        <button class="btn btn-primary" type="button" (click)="exporting.set(true)" [disabled]="!data.hasValue()">{{ 'Export PDF' | t }}</button>
       </div>
 
-      <app-modal heading="Export PDF" [open]="exporting()" (closed)="exporting.set(false)">
+      <app-modal [heading]="'Export PDF' | t" [open]="exporting()" (closed)="exporting.set(false)">
         @if (exporting() && data.hasValue()) {
           <app-export-dialog [installation]="data.value()" [projectName]="project.hasValue() ? project.value().name : 'project'" (closed)="exporting.set(false)" />
         }
@@ -40,7 +42,7 @@ type Tab = 'circuits' | 'boards' | 'links' | 'totals' | 'materials' | 'checks' |
 
       <div class="tabs" role="tablist">
         @for (t of tabs; track t.id) {
-          <button type="button" role="tab" [class.active]="tab() === t.id" (click)="tab.set(t.id)">{{ t.label }}
+          <button type="button" role="tab" [class.active]="tab() === t.id" (click)="tab.set(t.id)">{{ t.label | t }}
             @if (t.id === 'checks' && checkCount(); as n) { <span class="count" [class.err]="checkErrors() > 0">{{ n }}</span> }</button>
         }
       </div>
@@ -48,7 +50,7 @@ type Tab = 'circuits' | 'boards' | 'links' | 'totals' | 'materials' | 'checks' |
       @if (data.error(); as err) {
         <app-error-state [message]="message(err)" (retry)="data.reload()" />
       } @else if (!data.hasValue()) {
-        <app-loading label="Loading installation…" />
+        <app-loading [label]="'Loading installation…' | t" />
       } @else {
         @let inst = data.value();
         @switch (tab()) {
@@ -82,7 +84,7 @@ export class InstallationPage {
   protected readonly data = httpResource<InstallationDto>(() => `/api/projects/${this.projectId()}/installation`);
   /** `?tab=` query parameter (bound by the router), e.g. links to the Checks tab. */
   readonly initialTab = input<string | undefined>(undefined, { alias: 'tab' });
-  protected readonly tabs: { id: Tab; label: string }[] = [
+  protected readonly tabs: { id: Tab; label: TKey }[] = [
     { id: 'circuits', label: 'Circuits' },
     { id: 'boards', label: 'Distribution boards' },
     { id: 'links', label: 'Floor connections' },

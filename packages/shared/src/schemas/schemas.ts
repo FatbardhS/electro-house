@@ -17,11 +17,19 @@ const requiredName = (label: string, max = 200) =>
   z.string().trim().min(1, `${label} is required.`).max(max, `${label} must be at most ${max} characters.`);
 
 // ── Auth ───────────────────────────────────────────────────────────────
+
+/** Interface language. Albanian is the default. */
+export const LANGUAGES = ['sq', 'en'] as const;
+export type Language = (typeof LANGUAGES)[number];
+export const languageSchema = z.enum(LANGUAGES);
+export const setLanguageSchema = z.object({ language: languageSchema });
+
 export const signUpSchema = z.object({
   name: requiredName('Name', 120),
   email: z.email('Enter a valid email address.').trim().toLowerCase().max(254),
   password: z.string().min(10, 'Password must be at least 10 characters.').max(200),
   organizationName: requiredName('Company name', 160),
+  language: languageSchema.default('sq'),
 });
 export type SignUpInput = z.infer<typeof signUpSchema>;
 

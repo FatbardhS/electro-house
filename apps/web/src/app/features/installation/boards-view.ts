@@ -1,68 +1,67 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { DecimalPipe } from '@angular/common';
 import { componentType, type BoardSchedule, type CircuitLoad, type InstallationDto } from '@electro/shared';
 import { EmptyState } from '../../shared/ui/states';
+import { I18N_PIPES } from '../../core/i18n/t.pipe';
 
 const NOMINAL_PHASE_VOLTAGE = 230;
 
 /** One schedule per distribution board: its circuits, protection, loads and the load on each phase. */
 @Component({
   selector: 'app-boards-view',
-  imports: [DecimalPipe, EmptyState],
+  imports: [I18N_PIPES, EmptyState],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (schedules().length === 0) {
-      <div class="card"><app-empty-state heading="No distribution boards"
-        text="Place a distribution board symbol on a floor plan (Distribution & protection), then feed circuits from it." /></div>
+      <div class="card"><app-empty-state [heading]="'No distribution boards' | t"
+        [text]="'Place a distribution board symbol on a floor plan (Distribution & protection), then feed circuits from it.' | t" /></div>
     }
     @if (unassigned().length) {
-      <div class="banner banner-warn">⚠ {{ unassigned().length }} circuit(s) are not fed from any board:
-        {{ unassignedNames() }}. Choose a board in the Circuits tab.</div>
+      <div class="banner banner-warn">⚠ {{ '{n} circuit(s) are not fed from any board: {names}. Choose a board in the Circuits tab.' | t: { n: unassigned().length, names: unassignedNames() } }}</div>
     }
     @for (s of schedules(); track s.board.id) {
       <section class="card board">
         <header>
           <div>
-            <h3>{{ s.board.label ?? 'Board' }} <span class="faint">· {{ typeName(s.board.typeKey) }} · {{ s.floorName }}</span></h3>
-            <div class="faint small">{{ s.circuits.length }} circuit(s) · connected load {{ s.totalLoadW / 1000 | number: '1.2-2' }} kW</div>
+            <h3>{{ s.board.label ?? ('Board' | t) }} <span class="faint">· {{ typeName(s.board.typeKey) | tx }} · {{ s.floorName }}</span></h3>
+            <div class="faint small">{{ '{n} circuit(s) · connected load {kw} kW' | t: { n: s.circuits.length, kw: (s.totalLoadW / 1000 | num: 2) } }}</div>
           </div>
           <div class="phases">
             @for (p of phaseList(s); track p.name) {
               <div class="phase" [class.max]="p.isMax && imbalance(s) > 0.2">
                 <div class="faint small">{{ p.name }}</div>
-                <div class="mono">{{ p.w / 1000 | number: '1.2-2' }} kW</div>
-                <div class="mono faint small">≈ {{ p.a | number: '1.1-1' }} A</div>
+                <div class="mono">{{ p.w / 1000 | num: 2 }} kW</div>
+                <div class="mono faint small">≈ {{ p.a | num: 1 }} A</div>
               </div>
             }
             <div class="phase">
-              <div class="faint small">Imbalance</div>
-              <div class="mono" [class.bad]="imbalance(s) > 0.2">{{ imbalance(s) * 100 | number: '1.0-0' }} %</div>
+              <div class="faint small">{{ 'Imbalance' | t }}</div>
+              <div class="mono" [class.bad]="imbalance(s) > 0.2">{{ imbalance(s) * 100 | num: 0 }} %</div>
             </div>
           </div>
         </header>
         @if (s.circuits.length === 0) {
-          <p class="faint small pad">No circuits are fed from this board yet.</p>
+          <p class="faint small pad">{{ 'No circuits are fed from this board yet.' | t }}</p>
         } @else {
           <div class="scroll">
             <table class="table dense">
               <thead><tr>
-                <th>No.</th><th>Circuit</th><th>Phase</th><th>Protection</th><th>RCD</th><th>Cable</th>
-                <th class="num">Items</th><th class="num">Load W</th><th class="num">Ib A</th><th class="num">Cable m</th><th>Notes</th>
+                <th>{{ 'No.' | t }}</th><th>{{ 'Circuit' | t }}</th><th>{{ 'Phase' | t }}</th><th>{{ 'Protection' | t }}</th><th>RCD</th><th>{{ 'Cable' | t }}</th>
+                <th class="num">{{ 'Items' | t }}</th><th class="num">{{ 'Load W' | t }}</th><th class="num">{{ 'Ib A' | t }}</th><th class="num">{{ 'Cable m' | t }}</th><th>{{ 'Notes' | t }}</th>
               </tr></thead>
               <tbody>
                 @for (l of s.circuits; track l.circuit.id) {
                   @let c = l.circuit;
                   <tr [class.warn]="l.warnings.length">
                     <td class="mono">{{ c.number }}</td>
-                    <td>{{ c.name }} <span class="faint small">{{ c.category }}</span></td>
+                    <td>{{ c.name }} <span class="faint small">{{ c.category | tx }}</span></td>
                     <td>{{ c.phase }}</td>
                     <td>{{ protection(l) }}</td>
                     <td>{{ c.rcdGroup ? c.rcdGroup + (c.residualCurrentMa ? ' · ' + c.residualCurrentMa + ' mA' : '') : '—' }}</td>
                     <td>{{ c.cableType ?? '' }} {{ c.crossSectionMm2 ? c.crossSectionMm2 + ' mm²' : '' }}</td>
                     <td class="num">{{ l.componentCount }}</td>
-                    <td class="num mono">{{ l.loadW | number: '1.0-0' }}</td>
-                    <td class="num mono">{{ l.designCurrentA === null ? '—' : (l.designCurrentA | number: '1.1-1') }}</td>
-                    <td class="num mono">{{ l.cableM | number: '1.1-1' }}</td>
+                    <td class="num mono">{{ l.loadW | num: 0 }}</td>
+                    <td class="num mono">{{ l.designCurrentA === null ? '—' : (l.designCurrentA | num: 1) }}</td>
+                    <td class="num mono">{{ l.cableM | num: 1 }}</td>
                     <td class="notes">{{ l.warnings.join(' ') }}</td>
                   </tr>
                 }
@@ -72,8 +71,7 @@ const NOMINAL_PHASE_VOLTAGE = 230;
         }
       </section>
     }
-    <p class="faint small">Phase loads: single-phase circuits count fully on their phase, three-phase circuits a third on each.
-      Phase currents ≈ load / ({{ voltage }} V · cos φ). Imbalance = (highest − lowest) / highest phase load.</p>
+    <p class="faint small">{{ 'Phase loads: single-phase circuits count fully on their phase, three-phase circuits a third on each. Phase currents ≈ load / ({v} V · cos φ). Imbalance = (highest − lowest) / highest phase load.' | t: { v: voltage } }}</p>
   `,
   styles: `
     .board { margin-bottom: 16px; }

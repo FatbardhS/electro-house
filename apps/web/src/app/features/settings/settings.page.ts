@@ -10,25 +10,27 @@ import { MaterialRules } from './material-rules';
 import { PriceList } from './price-list';
 import { BillingPanel } from './billing-panel';
 import { TeamPanel } from './team-panel';
+import { I18N_PIPES } from '../../core/i18n/t.pipe';
+import type { TKey } from '../../core/i18n/sq';
 
 type Tab = 'company' | 'prices' | 'rules' | 'team' | 'billing';
 
 /** Company-wide settings: prices and costs, price list, material rules. */
 @Component({
   selector: 'app-settings-page',
-  imports: [LoadingState, ErrorState, CompanySettings, PriceList, MaterialRules, BillingPanel, TeamPanel],
+  imports: [I18N_PIPES, LoadingState, ErrorState, CompanySettings, PriceList, MaterialRules, BillingPanel, TeamPanel],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="page wide">
       <div class="page-header">
         <div>
-          <h1>Settings</h1>
-          <div class="subtitle">Shared by every project of {{ auth.session()?.organization?.name ?? 'your company' }}.</div>
+          <h1>{{ 'Settings' | t }}</h1>
+          <div class="subtitle">{{ 'Shared by every project of {name}.' | t: { name: auth.session()?.organization?.name ?? ('your company' | t) } }}</div>
         </div>
       </div>
       <div class="tabs" role="tablist">
         @for (t of tabs; track t.id) {
-          <button type="button" role="tab" [class.active]="current() === t.id" (click)="go(t.id)">{{ t.label }}</button>
+          <button type="button" role="tab" [class.active]="current() === t.id" (click)="go(t.id)">{{ t.label | t }}</button>
         }
       </div>
 
@@ -39,7 +41,7 @@ type Tab = 'company' | 'prices' | 'rules' | 'team' | 'billing';
       } @else if (settings.error() || materials.error() || rules.error(); as err) {
         <app-error-state [message]="message(err)" (retry)="reloadAll()" />
       } @else if (!settings.hasValue() || !materials.hasValue() || !rules.hasValue()) {
-        <app-loading label="Loading settings…" />
+        <app-loading [label]="'Loading settings…' | t" />
       } @else {
         @switch (current()) {
           @case ('company') { <app-company-settings [settings]="settings.value()" [readonly]="readonly()" (changed)="settings.reload()" /> }
@@ -71,7 +73,7 @@ export class SettingsPage {
   readonly devCheckout = input<string | undefined>(undefined, { alias: 'dev-checkout' });
   readonly devPortal = input<string | undefined>(undefined, { alias: 'dev-portal' });
 
-  protected readonly tabs: { id: Tab; label: string }[] = [
+  protected readonly tabs: { id: Tab; label: TKey }[] = [
     { id: 'company', label: 'Prices & costs' },
     { id: 'prices', label: 'Price list' },
     { id: 'rules', label: 'Material rules' },

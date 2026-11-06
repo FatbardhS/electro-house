@@ -192,7 +192,7 @@ export class TeamService {
       throw new ConflictException('An account with this email already exists. Sign in to accept the invitation.');
     }
     const passwordHash = await hash(input.password);
-    const user = await this.prisma.user.create({ data: { email: i.email, name: input.name, passwordHash } });
+    const user = await this.prisma.user.create({ data: { email: i.email, name: input.name, passwordHash, language: input.language } });
     await this.join(i, user.id);
     return this.auth.startSession(user.id, i.organizationId);
   }

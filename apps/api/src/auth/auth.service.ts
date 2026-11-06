@@ -32,7 +32,7 @@ export class AuthService {
       const organization = await tx.organization.create({
         data: { name: input.organizationName, subscriptionStatus: 'trialing', trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 86_400_000) },
       });
-      const user = await tx.user.create({ data: { email: input.email, name: input.name, passwordHash, lastOrganizationId: organization.id } });
+      const user = await tx.user.create({ data: { email: input.email, name: input.name, passwordHash, lastOrganizationId: organization.id, language: input.language } });
       await tx.membership.create({ data: { userId: user.id, organizationId: organization.id, role: 'OWNER' } });
       return { user, organization };
     });
@@ -110,6 +110,10 @@ export class AuthService {
     return { token, expiresAt, session: await this.sessionDto(userId, organizationId) };
   }
 
+  async setLanguage(userId: string, language: 'sq' | 'en'): Promise<void> {
+    await this.prisma.user.update({ where: { id: userId }, data: { language } });
+  }
+
   async sessionDto(userId: string, organizationId: string): Promise<SessionDto> {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
@@ -118,7 +122,7 @@ export class AuthService {
     const active = user.memberships.find((m) => m.organizationId === organizationId);
     if (!active) throw new ForbiddenException('You are not a member of that company.');
     return {
-      user: { id: user.id, email: user.email, name: user.name },
+      user: { id: user.id, email: user.email, name: user.name, language: user.language === 'en' ? 'en' : 'sq' },
       organization: {
         id: active.organization.id,
         name: active.organization.name,

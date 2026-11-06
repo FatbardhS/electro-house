@@ -7,33 +7,34 @@ import { Modal } from '../../shared/ui/modal';
 import { EmptyState, ErrorState, LoadingState } from '../../shared/ui/states';
 import { ProjectForm } from './project-form';
 import { ProjectTable } from './project-table';
+import { I18N_PIPES } from '../../core/i18n/t.pipe';
 
 @Component({
   selector: 'app-projects-page',
-  imports: [LoadingState, ErrorState, EmptyState, Modal, ProjectForm, ProjectTable],
+  imports: [I18N_PIPES, LoadingState, ErrorState, EmptyState, Modal, ProjectForm, ProjectTable],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="page">
       <div class="page-header">
         <div>
-          <h1>Projects</h1>
-          <div class="subtitle">All projects, most recently changed first.</div>
+          <h1>{{ 'Projects' | t }}</h1>
+          <div class="subtitle">{{ 'All projects, most recently changed first.' | t }}</div>
         </div>
-        <button class="btn btn-primary" type="button" (click)="creating.set(true)">+ New project</button>
+        <button class="btn btn-primary" type="button" (click)="creating.set(true)">+ {{ 'New project' | t }}</button>
       </div>
-      <input class="input search" type="search" placeholder="Search by project, client or address…"
-             aria-label="Search projects" (input)="onSearch($any($event.target).value)" />
+      <input class="input search" type="search" [placeholder]="'Search by project, client or address…' | t"
+             [attr.aria-label]="'Search projects' | t" (input)="onSearch($any($event.target).value)" />
       <div class="card">
         @if (projects.error(); as err) {
           <app-error-state [message]="message(err)" (retry)="projects.reload()" />
         } @else if (!projects.hasValue()) {
-          <app-loading label="Loading projects…" />
+          <app-loading [label]="'Loading projects…' | t" />
         } @else if (projects.value().length === 0) {
           @if (search()) {
-            <app-empty-state heading="No projects match “{{ search() }}”" />
+            <app-empty-state [heading]="'No projects match “{q}”' | t: { q: search() }" />
           } @else {
-            <app-empty-state heading="No projects yet" text="Projects are created for a client.">
-              <button class="btn btn-primary" type="button" (click)="creating.set(true)">+ New project</button>
+            <app-empty-state [heading]="'No projects yet' | t" [text]="'Projects are created for a client.' | t">
+              <button class="btn btn-primary" type="button" (click)="creating.set(true)">+ {{ 'New project' | t }}</button>
             </app-empty-state>
           }
         } @else {
@@ -41,7 +42,7 @@ import { ProjectTable } from './project-table';
         }
       </div>
     </div>
-    <app-modal heading="New project" [open]="creating()" (closed)="creating.set(false)">
+    <app-modal [heading]="'New project' | t" [open]="creating()" (closed)="creating.set(false)">
       @if (creating()) {
         <app-project-form (saved)="onCreated($event)" (cancelled)="creating.set(false)" />
       }

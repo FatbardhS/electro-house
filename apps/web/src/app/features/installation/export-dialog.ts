@@ -16,73 +16,74 @@ import {
 } from '@electro/shared';
 import { Api } from '../../core/api';
 import { toApiError } from '../../core/api-error';
+import { I18N_PIPES } from '../../core/i18n/t.pipe';
+import { t } from '../../core/i18n/i18n.service';
 
 const STORAGE_KEY = 'eh.export-options';
 
 /** Options for the project PDF; generates it on the server and downloads it. */
 @Component({
   selector: 'app-export-dialog',
+  imports: [I18N_PIPES],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @let o = options();
     <div class="cols">
       <fieldset>
-        <legend>Sections</legend>
+        <legend>{{ 'Sections' | t }}</legend>
         @for (s of sections; track s) {
-          <label class="check"><input type="checkbox" [checked]="o.sections.includes(s)" (change)="toggleSection(s, $event)" /> {{ names[s] }}</label>
+          <label class="check"><input type="checkbox" [checked]="o.sections.includes(s)" (change)="toggleSection(s, $event)" /> {{ names[s] | tx }}</label>
         }
       </fieldset>
       <fieldset [disabled]="!o.sections.includes('floors')">
-        <legend>Floors</legend>
+        <legend>{{ 'Floors' | t }}</legend>
         @for (f of installation().floors; track f.floorId) {
           <label class="check"><input type="checkbox" [checked]="floorOn(f.floorId)" (change)="toggleFloor(f.floorId, $event)" /> {{ f.name }}</label>
         }
-        <legend class="sub">Layers on the plans</legend>
+        <legend class="sub">{{ 'Layers on the plans' | t }}</legend>
         @for (l of layers; track l) {
-          <label class="check"><input type="checkbox" [checked]="!o.hiddenLayers.includes(l)" (change)="toggleLayer(l, $event)" /> {{ layerNames[l] }}</label>
+          <label class="check"><input type="checkbox" [checked]="!o.hiddenLayers.includes(l)" (change)="toggleLayer(l, $event)" /> {{ layerNames[l] | tx }}</label>
         }
       </fieldset>
       <fieldset>
-        <legend>Paper</legend>
-        <label class="f"><span>Floor plan sheets</span>
+        <legend>{{ 'Paper' | t }}</legend>
+        <label class="f"><span>{{ 'Floor plan sheets' | t }}</span>
           <select class="input" (change)="patch({ paper: $any(val($event)) })">
             @for (p of papers; track p) { <option [value]="p" [selected]="p === o.paper">{{ p === 'plan' ? 'Same size as the plan' : p }}</option> }
           </select></label>
-        <label class="f"><span>Orientation</span>
+        <label class="f"><span>{{ 'Orientation' | t }}</span>
           <select class="input" (change)="patch({ orientation: $any(val($event)) })" [disabled]="o.paper === 'plan'">
-            <option value="auto" [selected]="o.orientation === 'auto'">Automatic</option>
-            <option value="landscape" [selected]="o.orientation === 'landscape'">Landscape</option>
-            <option value="portrait" [selected]="o.orientation === 'portrait'">Portrait</option>
+            <option value="auto" [selected]="o.orientation === 'auto'">{{ 'Automatic' | t }}</option>
+            <option value="landscape" [selected]="o.orientation === 'landscape'">{{ 'Landscape' | t }}</option>
+            <option value="portrait" [selected]="o.orientation === 'portrait'">{{ 'Portrait' | t }}</option>
           </select></label>
-        <label class="f"><span>Bill of materials grouped by</span>
+        <label class="f"><span>{{ 'Bill of materials grouped by' | t }}</span>
           <select class="input" (change)="patch({ bomGrouping: $any(val($event)) })">
-            <option value="project" [selected]="o.bomGrouping === 'project'">Whole project</option>
-            <option value="floor" [selected]="o.bomGrouping === 'floor'">Floor</option>
-            <option value="circuit" [selected]="o.bomGrouping === 'circuit'">Circuit</option>
+            <option value="project" [selected]="o.bomGrouping === 'project'">{{ 'Whole project' | t }}</option>
+            <option value="floor" [selected]="o.bomGrouping === 'floor'">{{ 'Floor' | t }}</option>
+            <option value="circuit" [selected]="o.bomGrouping === 'circuit'">{{ 'Circuit' | t }}</option>
           </select></label>
-        <p class="faint small">Calibrated floors are printed at the next standard scale that fits (e.g. 1:100) with a scale bar.
-          Schedules and reports use A4.</p>
+        <p class="faint small">{{ 'Calibrated floors are printed at the next standard scale that fits (e.g. 1:100) with a scale bar. Schedules and reports use A4.' | t }}</p>
       </fieldset>
     </div>
     <fieldset class="dxf">
-      <legend>CAD drawing (DXF)</legend>
+      <legend>{{ 'CAD drawing (DXF)' | t }}</legend>
       <div class="dxf-row">
-        <select class="input" (change)="dxfFloor.set(val($event))" aria-label="Floor for DXF">
-          <option value="" [selected]="!dxfFloor()">All floors (ZIP, one DXF per floor)</option>
+        <select class="input" (change)="dxfFloor.set(val($event))" [attr.aria-label]="'Floor for DXF' | t">
+          <option value="" [selected]="!dxfFloor()">{{ 'All floors (ZIP, one DXF per floor)' | t }}</option>
           @for (f of installation().floors; track f.floorId) { <option [value]="f.floorId" [selected]="f.floorId === dxfFloor()">{{ f.name }}</option> }
         </select>
-        <button class="btn" type="button" (click)="downloadDxf()" [disabled]="busy() || installation().floors.length === 0">Download DXF</button>
+        <button class="btn" type="button" (click)="downloadDxf()" [disabled]="busy() || installation().floors.length === 0">{{ 'Download DXF' | t }}</button>
       </div>
-      <p class="faint small">Symbols as blocks, wires as polylines, one CAD layer per app layer; in metres when the floor has a scale.
-        The architect's plan is not included: overlay it on their own CAD drawing.</p>
+      <p class="faint small">{{ 'Symbols as blocks, wires as polylines, one CAD layer per app layer; in metres when the floor has a scale. The architect\’s plan is not included: overlay it on their own CAD drawing.' | t }}</p>
     </fieldset>
     @if (checkErrors(); as n) {
-      <div class="banner banner-warn">⚠ The checks found {{ n }} error(s) in this project (see the Checks tab). You can still export.</div>
+      <div class="banner banner-warn">⚠ {{ 'The checks found {n} error(s) in this project (see the Checks tab). You can still export.' | t: { n: n } }}</div>
     }
-    @if (error(); as e) { <div class="banner banner-error" role="alert">{{ e }}</div> }
+    @if (error(); as e) { <div class="banner banner-error" role="alert">{{ e | tx }}</div> }
     <div class="actions">
-      <button class="btn" type="button" (click)="closed.emit()">Cancel</button>
-      <button class="btn btn-primary" type="button" (click)="generate()" [disabled]="busy()">{{ busy() ? 'Generating…' : 'Download PDF' }}</button>
+      <button class="btn" type="button" (click)="closed.emit()">{{ 'Cancel' | t }}</button>
+      <button class="btn btn-primary" type="button" (click)="generate()" [disabled]="busy()">{{ (busy() ? 'Generating…' : 'Download PDF') | t }}</button>
     </div>
   `,
   styles: `
@@ -172,16 +173,16 @@ export class ExportDialog {
   protected async generate(): Promise<void> {
     const o = this.options();
     if (o.sections.includes('floors') && o.floorIds.length === 0 && this.installation().floors.length === 0) {
-      this.error.set('The project has no floors to export.');
+      this.error.set(t('The project has no floors to export.'));
       return;
     }
     if (o.sections.includes('floors') && this.installation().floors.length > 0 && !this.installation().floors.some((f) => this.floorOn(f.floorId))) {
-      this.error.set('Choose at least one floor, or untick “Floor plans”.');
+      this.error.set(t('Choose at least one floor, or untick “Floor plans”.'));
       return;
     }
     const check = exportOptionsSchema.safeParse(o);
     if (!check.success) {
-      this.error.set(check.error.issues[0]?.message ?? 'Invalid options.');
+      this.error.set(check.error.issues[0]?.message ?? t('Invalid options.'));
       return;
     }
     this.error.set(null);

@@ -5,53 +5,55 @@ import { CIRCUIT_CATEGORIES, DEFAULT_CIRCUIT, nextCircuitNumber, type CircuitDto
 import { Api } from '../../../core/api';
 import { toApiError } from '../../../core/api-error';
 import { DrawingStore } from '../state/drawing.store';
+import { I18N_PIPES } from '../../../core/i18n/t.pipe';
+import { t } from '../../../core/i18n/i18n.service';
 
 /** Circuits of the project inside the editor: highlight, create, and assign the selection. */
 @Component({
   selector: 'app-circuits-panel',
-  imports: [FormsModule, RouterLink],
+  imports: [I18N_PIPES, FormsModule, RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="top">
-      <button class="btn btn-sm" type="button" (click)="creating.set(!creating())">{{ creating() ? 'Cancel' : '+ New circuit' }}</button>
-      <a class="btn btn-sm btn-ghost" [routerLink]="['/projects', projectId(), 'installation']">Details →</a>
+      <button class="btn btn-sm" type="button" (click)="creating.set(!creating())">{{ (creating() ? 'Cancel' : '+ New circuit') | t }}</button>
+      <a class="btn btn-sm btn-ghost" [routerLink]="['/projects', projectId(), 'installation']">{{ 'Details' | t }} →</a>
     </div>
 
     @if (creating()) {
       <form class="new" (ngSubmit)="create()">
-        <input class="input" name="name" [(ngModel)]="name" placeholder="Name, e.g. Kitchen sockets" maxlength="120" required />
+        <input class="input" name="name" [(ngModel)]="name" [placeholder]="'Name, e.g. Kitchen sockets' | t" maxlength="120" required />
         <select class="input" name="category" [(ngModel)]="category">
-          @for (c of categories; track c) { <option [value]="c">{{ c }}</option> }
+          @for (c of categories; track c) { <option [value]="c">{{ c | tx }}</option> }
         </select>
         <select class="input" name="board" [(ngModel)]="boardId">
-          <option value="">No board yet</option>
+          <option value="">{{ 'No board yet' | t }}</option>
           @for (b of drawing.projectBoards(); track b.id) { <option [value]="b.id">{{ b.label }} · {{ b.floorName }}</option> }
         </select>
         <button class="btn btn-sm btn-primary" type="submit" [disabled]="busy()">
-          Create{{ drawing.selectionCount() ? ' and assign ' + drawing.selectionCount() + ' selected' : '' }}
+          {{ drawing.selectionCount() ? ('Create and assign {n} selected' | t: { n: drawing.selectionCount() }) : ('Create' | t) }}
         </button>
       </form>
     }
-    @if (error(); as e) { <div class="field-error">{{ e }}</div> }
+    @if (error(); as e) { <div class="field-error">{{ e | tx }}</div> }
 
     @if (drawing.selectionCount()) {
-      <p class="hint">{{ drawing.selectionCount() }} selected: click <b>Assign</b> on a circuit, or
-        <button class="link" type="button" (click)="drawing.assignSelectionToCircuit(null)">remove from circuit</button>.</p>
+      <p class="hint">{{ '{n} selected: click Assign on a circuit, or' | t: { n: drawing.selectionCount() } }}
+        <button class="link" type="button" (click)="drawing.assignSelectionToCircuit(null)">{{ 'remove from circuit' | t }}</button>.</p>
     }
 
     <ul class="list">
       @for (c of rows(); track c.circuit.id) {
         <li [class.on]="drawing.highlightCircuit() === c.circuit.id">
-          <button class="name" type="button" (click)="toggleHighlight(c.circuit.id)" [title]="'Highlight circuit ' + c.circuit.number + ' on the plan'">
+          <button class="name" type="button" (click)="toggleHighlight(c.circuit.id)" [title]="'Highlight circuit {n} on the plan' | t: { n: c.circuit.number }">
             <span class="num mono">{{ c.circuit.number }}</span>
-            <span class="txt">{{ c.circuit.name }}<span class="faint"> · {{ c.count }} here</span></span>
+            <span class="txt">{{ c.circuit.name }}<span class="faint"> · {{ '{n} here' | t: { n: c.count } }}</span></span>
           </button>
           @if (drawing.selectionCount()) {
-            <button class="btn btn-sm" type="button" (click)="drawing.assignSelectionToCircuit(c.circuit.id)">Assign</button>
+            <button class="btn btn-sm" type="button" (click)="drawing.assignSelectionToCircuit(c.circuit.id)">{{ 'Assign' | t }}</button>
           }
         </li>
       } @empty {
-        <li class="faint empty">No circuits yet. Create one, then assign components and wires to it.</li>
+        <li class="faint empty">{{ 'No circuits yet. Create one, then assign components and wires to it.' | t }}</li>
       }
     </ul>
   `,
@@ -103,7 +105,7 @@ export class CircuitsPanel {
   protected async create(): Promise<void> {
     const name = this.name.trim();
     if (!name) {
-      this.error.set('Enter a circuit name.');
+      this.error.set(t('Enter a circuit name.'));
       return;
     }
     this.busy.set(true);

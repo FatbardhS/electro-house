@@ -1,6 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { DatePipe } from '@angular/common';
 import {
   CalibrationError,
   calibratePaperScale,
@@ -11,93 +10,94 @@ import {
   type FloorDto,
 } from '@electro/shared';
 import { ToolsStore } from '../state/tools.store';
+import { I18N_PIPES } from '../../../core/i18n/t.pipe';
+import { t, tx } from '../../../core/i18n/i18n.service';
 
 /** Shows the floor's scale and runs the calibration workflow (two points or paper scale). */
 @Component({
   selector: 'app-calibration-panel',
-  imports: [FormsModule, DatePipe],
+  imports: [I18N_PIPES, FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section>
-      <h3>Scale</h3>
+      <h3>{{ 'Scale' | t }}</h3>
       @if (floor().calibration; as c) {
         <div class="status ok">
           <div class="big mono">1 : {{ ratio(c) }}</div>
           <div class="faint">
-            @if (c.method === 'two-point') { From two points, {{ (c.realDistanceMm / 1000).toFixed(3) }} m }
-            @else { Paper scale entered }
-            · {{ c.calibratedAt | date: 'short' }}
+            @if (c.method === 'two-point') { {{ 'From two points, {d} m' | t: { d: (c.realDistanceMm / 1000 | num: 3) } }} }
+            @else { {{ 'Paper scale entered' | t }} }
+            · {{ c.calibratedAt | ldate: true }}
           </div>
         </div>
         @if (floor().calibrationNeedsCheck) {
           <div class="banner banner-warn">
-            The plan PDF was replaced or its page changed. Check that the scale is still right
-            by measuring a known dimension.
+            {{ 'The plan PDF was replaced or its page changed. Check that the scale is still right by measuring a known dimension.' | t }}
           </div>
           <div class="row">
-            <button class="btn btn-sm" type="button" [disabled]="locked()" (click)="confirmed.emit()">Scale is correct</button>
-            <button class="btn btn-sm" type="button" [disabled]="locked()" (click)="start()">Recalibrate</button>
+            <button class="btn btn-sm" type="button" [disabled]="locked()" (click)="confirmed.emit()">{{ 'Scale is correct' | t }}</button>
+            <button class="btn btn-sm" type="button" [disabled]="locked()" (click)="start()">{{ 'Recalibrate' | t }}</button>
           </div>
         }
       } @else {
-        <div class="banner banner-warn">Not calibrated. Lengths cannot be measured until you set the scale.</div>
+        <div class="banner banner-warn">{{ 'Not calibrated. Lengths cannot be measured until you set the scale.' | t }}</div>
       }
 
       @if (tools.tool() !== 'calibrate') {
         @if (!floor().calibrationNeedsCheck) {
           <button class="btn btn-sm full" type="button" [disabled]="locked()" (click)="start()">
-            {{ floor().calibration ? 'Recalibrate' : 'Calibrate scale' }}
+            {{ (floor().calibration ? 'Recalibrate' : 'Calibrate scale') | t }}
           </button>
         }
-        @if (locked()) { <p class="hint">The plan is locked. Unlock it to change the scale.</p> }
+        @if (locked()) { <p class="hint">{{ 'The plan is locked. Unlock it to change the scale.' | t }}</p> }
       } @else {
         <div class="calibrating">
           <div class="tabs" role="tablist">
-            <button type="button" role="tab" [class.active]="method() === 'two-point'" (click)="method.set('two-point')">Two points</button>
-            <button type="button" role="tab" [class.active]="method() === 'paper-scale'" (click)="method.set('paper-scale')">Paper scale</button>
+            <button type="button" role="tab" [class.active]="method() === 'two-point'" (click)="method.set('two-point')">{{ 'Two points' | t }}</button>
+            <button type="button" role="tab" [class.active]="method() === 'paper-scale'" (click)="method.set('paper-scale')">{{ 'Paper scale' | t }}</button>
           </div>
 
           @if (method() === 'two-point') {
             <ol class="steps">
               <li [class.current]="tools.calibrationStep() === 'pick-first'" [class.done]="tools.calibrationPoints().length > 0">
-                Click the start of a dimension you know (e.g. a wall marked 4.00 m).
+                {{ 'Click the start of a dimension you know (e.g. a wall marked 4.00 m).' | t }}
               </li>
               <li [class.current]="tools.calibrationStep() === 'pick-second'" [class.done]="tools.calibrationPoints().length > 1">
-                Click its end. Hold <kbd>Shift</kbd> to keep the line straight.
+                {{ 'Click its end. Hold Shift to keep the line straight.' | t }}
               </li>
-              <li [class.current]="tools.calibrationStep() === 'enter-distance'">Enter the real distance.</li>
+              <li [class.current]="tools.calibrationStep() === 'enter-distance'">{{ 'Enter the real distance.' | t }}</li>
             </ol>
             @if (tools.calibrationStep() === 'enter-distance') {
               <form (ngSubmit)="applyTwoPoint()">
                 <div class="field">
-                  <label for="cal-dist">Real distance (metres)</label>
+                  <label for="cal-dist">{{ 'Real distance (metres)' | t }}</label>
                   <input id="cal-dist" class="input mono" name="dist" type="number" step="0.001" min="0"
                          [(ngModel)]="distanceM" autofocus placeholder="4.00" />
                 </div>
                 @if (shortSpan()) {
-                  <p class="hint warn">These points are close together on screen. A longer reference gives a more accurate scale.</p>
+                  <p class="hint warn">{{ 'These points are close together on screen. A longer reference gives a more accurate scale.' | t }}</p>
                 }
                 <div class="row">
-                  <button class="btn btn-sm btn-primary" type="submit">Apply scale</button>
-                  <button class="btn btn-sm" type="button" (click)="tools.resetCalibration()">Pick again</button>
+                  <button class="btn btn-sm btn-primary" type="submit">{{ 'Apply scale' | t }}</button>
+                  <button class="btn btn-sm" type="button" (click)="tools.resetCalibration()">{{ 'Pick again' | t }}</button>
                 </div>
               </form>
             }
           } @else {
             <form (ngSubmit)="applyPaperScale()">
-              <p class="hint">Use this for vector PDFs exported from CAD at their true paper size. Check the result with the measure tool.</p>
+              <p class="hint">{{ 'Use this for vector PDFs exported from CAD at their true paper size. Check the result with the measure tool.' | t }}</p>
               <div class="field">
-                <label for="cal-scale">Drawing scale</label>
+                <label for="cal-scale">{{ 'Drawing scale' | t }}</label>
                 <div class="ratio"><span class="mono">1 :</span>
                   <input id="cal-scale" class="input mono" name="scale" type="number" min="1" step="1"
                          [(ngModel)]="paperScale" placeholder="50" />
                 </div>
               </div>
-              <button class="btn btn-sm btn-primary" type="submit">Apply scale</button>
+              <button class="btn btn-sm btn-primary" type="submit">{{ 'Apply scale' | t }}</button>
             </form>
           }
-          @if (error(); as e) { <div class="field-error">{{ e }}</div> }
-          <button class="btn btn-sm btn-ghost full" type="button" (click)="cancel()">Cancel</button>
+          @if (error(); as e) { <div class="field-error">{{ e | tx }}</div> }
+          <button class="btn btn-sm btn-ghost full" type="button" (click)="cancel()">{{ 'Cancel' | t }}</button>
         </div>
       }
     </section>
@@ -173,7 +173,7 @@ export class CalibrationPanel {
       this.applied.emit(cal);
       this.tools.setTool('measure'); // natural next step: verify the scale by measuring
     } catch (err) {
-      this.error.set(err instanceof CalibrationError ? err.message : 'The scale could not be calculated.');
+      this.error.set(err instanceof CalibrationError ? tx(err.message) : t('The scale could not be calculated.'));
     }
   }
 }

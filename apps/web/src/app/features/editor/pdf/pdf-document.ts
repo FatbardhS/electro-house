@@ -4,6 +4,7 @@
  */
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 import type { Size } from '@electro/shared';
+import { t } from '../../../core/i18n/i18n.service';
 
 const ASSETS = '/pdfjs/';
 let pdfjsPromise: Promise<typeof import('pdfjs-dist')> | undefined;
@@ -51,9 +52,9 @@ export async function openPdf(url: string, onProgress?: (fraction: number) => vo
   } catch (err) {
     await task.destroy().catch(() => undefined);
     const name = (err as { name?: string }).name;
-    if (name === 'PasswordException') throw new PdfLoadError('This PDF is password-protected.');
-    if (name === 'InvalidPDFException') throw new PdfLoadError('This file could not be read as a PDF.');
-    throw new PdfLoadError(`The plan PDF could not be loaded (${(err as Error).message ?? 'unknown error'}).`);
+    if (name === 'PasswordException') throw new PdfLoadError(t('This PDF is password-protected.'));
+    if (name === 'InvalidPDFException') throw new PdfLoadError(t('This file could not be read as a PDF.'));
+    throw new PdfLoadError(t('The plan PDF could not be loaded ({reason}).', { reason: (err as Error).message ?? t('unknown error') }));
   }
 }
 

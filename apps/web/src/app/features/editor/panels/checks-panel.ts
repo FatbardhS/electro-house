@@ -1,29 +1,30 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { CHECKS, type Issue } from '@electro/shared';
+import { I18N_PIPES } from '../../../core/i18n/t.pipe';
 
 /** Validation issues of the floor being edited (plus project-wide ones), live while drawing. */
 @Component({
   selector: 'app-checks-panel',
-  imports: [RouterLink],
+  imports: [I18N_PIPES, RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="head">
       <span class="faint small">{{ issues().length ? issues().length + ' open issue(s) on this floor' : 'No problems on this floor' }}</span>
-      <a class="btn btn-sm btn-ghost" [routerLink]="['/projects', projectId(), 'installation']" [queryParams]="{ tab: 'checks' }">All →</a>
+      <a class="btn btn-sm btn-ghost" [routerLink]="['/projects', projectId(), 'installation']" [queryParams]="{ tab: 'checks' }">{{ 'All' | t }} →</a>
     </div>
     <ul>
       @for (i of issues(); track i.id) {
         <li>
           <button type="button" class="issue" (click)="focus.emit(i)" [disabled]="!i.componentIds.length && !i.wireIds.length"
-                  [title]="i.componentIds.length || i.wireIds.length ? 'Select and zoom to it' : ''">
+                  [title]="i.componentIds.length || i.wireIds.length ? ('Select and zoom to it' | t) : ''">
             <span class="dot" [class]="'dot ' + i.severity"></span>
-            <span class="txt"><strong>{{ titles[i.code] }}</strong><br />{{ i.message }}</span>
+            <span class="txt"><strong>{{ titles[i.code] | tx }}</strong><br />{{ i.message | tx }}</span>
           </button>
         </li>
       }
     </ul>
-    @if (ignored()) { <p class="faint small">{{ ignored() }} ignored issue(s) hidden. Manage them in the project's Checks tab.</p> }
+    @if (ignored()) { <p class="faint small">{{ '{n} ignored issue(s) hidden. Manage them in the project’s Checks tab.' | t: { n: ignored() } }}</p> }
   `,
   styles: `
     .head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }

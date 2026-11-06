@@ -1,31 +1,32 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { distance, formatMetres, measureMetres, type Calibration } from '@electro/shared';
 import { ToolsStore } from '../state/tools.store';
+import { I18N_PIPES } from '../../../core/i18n/t.pipe';
 
 /** Live result of the measure tool. Lengths are only shown when the floor is calibrated. */
 @Component({
   selector: 'app-measure-panel',
+  imports: [I18N_PIPES],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section>
-      <h3>Measure</h3>
+      <h3>{{ 'Measure' | t }}</h3>
       @if (tools.tool() !== 'measure') {
-        <button class="btn btn-sm full" type="button" (click)="tools.setTool('measure')">Measure distance <kbd>M</kbd></button>
+        <button class="btn btn-sm full" type="button" (click)="tools.setTool('measure')">{{ 'Measure distance' | t }} <kbd>M</kbd></button>
       } @else if (tools.measurePoints().length === 0) {
-        <p class="hint">Click points along the route. Double-click or press <kbd>Enter</kbd> to finish,
-          <kbd>Backspace</kbd> removes the last point, <kbd>Esc</kbd> clears. Hold <kbd>Shift</kbd> for straight lines.</p>
+        <p class="hint">{{ 'Click points along the route. Double-click or press Enter to finish, Backspace removes the last point, Esc clears. Hold Shift for straight lines.' | t }}</p>
       } @else {
         <div class="total mono">{{ total() }}</div>
         @if (!calibration()) {
-          <p class="hint warn">Calibrate the scale to see real lengths.</p>
+          <p class="hint warn">{{ 'Calibrate the scale to see real lengths.' | t }}</p>
         }
         @if (segments().length > 1) {
           <ol class="segments mono">
             @for (s of segments(); track $index) { <li>{{ s }}</li> }
           </ol>
         }
-        <p class="hint">{{ tools.measureFinished() ? 'Finished. Click to start a new measurement.' : 'Double-click or Enter to finish.' }}</p>
-        <button class="btn btn-sm" type="button" (click)="tools.clearMeasure()">Clear</button>
+        <p class="hint">{{ (tools.measureFinished() ? 'Finished. Click to start a new measurement.' : 'Double-click or Enter to finish.') | t }}</p>
+        <button class="btn btn-sm" type="button" (click)="tools.clearMeasure()">{{ 'Clear' | t }}</button>
       }
     </section>
   `,

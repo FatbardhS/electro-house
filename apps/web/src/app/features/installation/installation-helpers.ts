@@ -1,4 +1,5 @@
 import { componentType, type ComponentDto, type InstallationDto } from '@electro/shared';
+import { t, tx } from '../../core/i18n/i18n.service';
 
 export interface ComponentOption {
   id: string;
@@ -13,7 +14,7 @@ export function componentOptions(inst: InstallationDto, filter: (c: ComponentDto
   return inst.floors.flatMap((f) =>
     f.components.filter(filter).map((c) => ({
       id: c.id,
-      label: `${c.label ?? '—'} · ${componentType(c.typeKey)?.name ?? c.typeKey} · ${f.name}`,
+      label: `${c.label ?? '—'} · ${tx(componentType(c.typeKey)?.name ?? c.typeKey)} · ${f.name}`,
       floorId: f.floorId,
       floorName: f.name,
       component: c,
@@ -24,10 +25,10 @@ export function componentOptions(inst: InstallationDto, filter: (c: ComponentDto
 export function boardOptions(inst: InstallationDto): ComponentOption[] {
   return componentOptions(inst, (c) => c.typeKey.startsWith('board.')).map((o) => ({
     ...o,
-    label: `${o.component.label ?? 'Board'} (${o.floorName})`,
+    label: `${o.component.label ?? t('Board')} (${o.floorName})`,
   }));
 }
 
 export function componentName(inst: InstallationDto, id: string): string {
-  return componentOptions(inst, (c) => c.id === id)[0]?.label ?? 'missing component';
+  return componentOptions(inst, (c) => c.id === id)[0]?.label ?? t('missing component');
 }

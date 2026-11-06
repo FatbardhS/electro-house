@@ -1,6 +1,6 @@
 import { HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
-import { CanActivateFn, Router } from '@angular/router';
+import { CanActivateFn, CanMatchFn, Router } from '@angular/router';
 import { catchError, throwError } from 'rxjs';
 import { AuthService } from './auth.service';
 
@@ -14,6 +14,16 @@ export const authGuard: CanActivateFn = async (_route, state) => {
   } catch {
     // Server unreachable: let the page load and show its own error state rather than bouncing to sign-in.
     return true;
+  }
+};
+
+/** Matches only for visitors who are not signed in (the landing page at "/"). */
+export const visitorMatch: CanMatchFn = async () => {
+  const auth = inject(AuthService);
+  try {
+    return !(await auth.ensureLoaded());
+  } catch {
+    return true; // server unreachable: the landing page still works
   }
 };
 

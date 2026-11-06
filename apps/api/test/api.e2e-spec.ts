@@ -53,6 +53,24 @@ describe('auth', () => {
     await agent.get('/api/auth/me').expect(401);
   });
 
+  it('defaults the interface language to Albanian and saves a change on the account', async () => {
+    const { agent, email } = await signUp('Gjuha Sh.p.k.');
+    expect((await agent.get('/api/auth/me').expect(200)).body.user.language).toBe('sq');
+    await agent.post('/api/auth/language').send({ language: 'en' }).expect(204);
+    await agent.post('/api/auth/language').send({ language: 'de' }).expect(400);
+    await agent.post('/api/auth/sign-out').expect(204);
+    const again = await request(app.getHttpServer()).post('/api/auth/sign-in').send({ email, password: 'correct horse battery' }).expect(200);
+    expect(again.body.user.language).toBe('en');
+  });
+
+  it('stores the language chosen at sign-up', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/auth/sign-up')
+      .send({ name: 'Test', email: `en-${randomUUID()}@example.com`, password: 'correct horse battery', organizationName: 'English Ltd', language: 'en' })
+      .expect(201);
+    expect(res.body.user.language).toBe('en');
+  });
+
   it('rejects a wrong password with a generic message', async () => {
     const { email } = await signUp('Volt Co');
     const res = await request(app.getHttpServer())

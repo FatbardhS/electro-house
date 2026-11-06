@@ -55,6 +55,10 @@ import { browserJournal } from './state/journal';
 import { ToolsStore, type ToolId } from './state/tools.store';
 import { ViewportStore } from './viewport/viewport.store';
 import { Workspace } from './workspace';
+import { I18n } from '../../core/i18n/i18n.service';
+import { I18N_PIPES } from '../../core/i18n/t.pipe';
+import type { TKey } from '../../core/i18n/sq';
+import { t, tx } from '../../core/i18n/i18n.service';
 
 interface EditorSession {
   sync: FloorSync;
@@ -62,7 +66,7 @@ interface EditorSession {
   pdf: OpenedPdf | null;
 }
 
-const SAVE_LABEL: Record<SaveStatus, string> = {
+const SAVE_LABEL: Record<SaveStatus, TKey> = {
   saved: 'All changes saved',
   pending: 'Unsaved changes',
   saving: 'Saving…',
@@ -79,6 +83,7 @@ let clipboard: { components: ComponentDto[]; wires: WireDto[] } = { components: 
 @Component({
   selector: 'app-editor-page',
   imports: [
+    I18N_PIPES,
     RouterLink,
     Workspace,
     CalibrationPanel,
@@ -270,9 +275,9 @@ export class EditorPage {
         if (inst) this.drawing.circuits.set(inst.circuits);
         const others = (inst?.floors ?? [])
           .filter((f) => f.floorId !== floorId)
-          .flatMap((f) => f.components.filter((c) => c.typeKey.startsWith('board.')).map((c) => ({ id: c.id, label: c.label ?? 'Board', floorName: f.name })));
-        const floorName = this.floor()?.name ?? 'This floor';
-        this.drawing.projectBoards.set([...here.map((c) => ({ id: c.id, label: c.label ?? 'Board', floorName })), ...others]);
+          .flatMap((f) => f.components.filter((c) => c.typeKey.startsWith('board.')).map((c) => ({ id: c.id, label: c.label ?? t('Board'), floorName: f.name })));
+        const floorName = this.floor()?.name ?? t('This floor');
+        this.drawing.projectBoards.set([...here.map((c) => ({ id: c.id, label: c.label ?? t('Board'), floorName })), ...others]);
       });
     });
 
@@ -327,12 +332,12 @@ export class EditorPage {
 
   protected undo(): void {
     const label = this.drawing.undo();
-    this.flash(label ? `Undo: ${label}` : 'Nothing to undo');
+    this.flash(label ? t('Undo: {label}', { label }) : t('Nothing to undo'));
   }
 
   protected redo(): void {
     const label = this.drawing.redo();
-    this.flash(label ? `Redo: ${label}` : 'Nothing to redo');
+    this.flash(label ? t('Redo: {label}', { label }) : t('Nothing to redo'));
   }
 
   /** Selected components plus selected wires, deep-copied with wire ends resolved to positions. */
@@ -349,7 +354,7 @@ export class EditorPage {
     const n = snap.components.length + snap.wires.length;
     if (!n) return;
     clipboard = snap;
-    this.flash(`Copied ${n} object${n === 1 ? '' : 's'}`);
+    this.flash(n === 1 ? t('Copied 1 object') : t('Copied {n} objects', { n }));
   }
 
   /**
@@ -396,7 +401,7 @@ export class EditorPage {
     const dy = cursor ? cursor.y - cy : 5 * MM_TO_PT;
     const copy = this.cloneSet(src, dx, dy, this.drawing.components());
     const n = copy.components.length + copy.wires.length;
-    this.drawing.add(copy.components, n === 1 ? 'Paste' : `Paste ${n} objects`, copy.wires);
+    this.drawing.add(copy.components, n === 1 ? t('Paste') : t('Paste {n} objects', { n }), copy.wires);
   }
 
   private duplicate(): void {
@@ -405,7 +410,7 @@ export class EditorPage {
     if (!n) return;
     const offset = 5 * MM_TO_PT;
     const copy = this.cloneSet(snap, offset, offset, this.drawing.components());
-    this.drawing.add(copy.components, n === 1 ? 'Duplicate' : `Duplicate ${n} objects`, copy.wires);
+    this.drawing.add(copy.components, n === 1 ? t('Duplicate') : t('Duplicate {n} objects', { n }), copy.wires);
   }
 
   /** Copies the selection to the same position on another floor (saved directly to that floor). */
@@ -422,9 +427,9 @@ export class EditorPage {
         ...copy.wires.map((wire) => ({ op: 'upsertWire' as const, wire })),
       ];
       await this.api.patchDrawing(targetId, { baseRevision: d.revision, ops });
-      this.flash(`Copied ${n} object${n === 1 ? '' : 's'} to ${target?.name ?? 'the other floor'}`);
+      this.flash(t('Copied {n} object(s) to {floor}', { n, floor: target?.name ?? t('the other floor') }));
     } catch (err) {
-      this.flash(`Copy failed: ${toApiError(err).message}`);
+      this.flash(t('Copy failed: {reason}', { reason: tx(toApiError(err).message) }));
     }
   }
 
@@ -467,7 +472,7 @@ export class EditorPage {
     if (!file || !floor) return;
     this.uploadError.set(null);
     if (file.size > MAX_PLAN_FILE_BYTES) {
-      this.uploadError.set(`The file is larger than ${MAX_PLAN_FILE_BYTES / 1024 / 1024} MB.`);
+      this.uploadError.set(t('The file is larger than {mb} MB.', { mb: MAX_PLAN_FILE_BYTES / 1024 / 1024 }));
       return;
     }
     this.uploadState.set({ progress: 0 });
@@ -487,8 +492,8 @@ export class EditorPage {
   // ── Keyboard ──
 
   protected onKey(e: KeyboardEvent): void {
-    const t = e.target as HTMLElement | null;
-    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+    const el = e.target as HTMLElement | null;
+    if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return;
     if (!this.floor()?.planFile) return;
     const mod = e.ctrlKey || e.metaKey;
     const key = e.key.toLowerCase();
@@ -541,7 +546,7 @@ export class EditorPage {
       case 's':
       case 'S':
         this.tools.toggleSnap();
-        this.flash(this.tools.snap() ? 'Snap to grid on' : 'Snap to grid off');
+        this.flash(this.tools.snap() ? t('Snap to grid on') : t('Snap to grid off'));
         break;
       case 'f':
       case 'F':
@@ -603,7 +608,7 @@ export class EditorPage {
     const a = this.viewport.toPlan({ x: 0, y: 0 });
     const b = this.viewport.toPlan(d);
     if (!a || !b) return;
-    this.drawing.moveSelected(b.x - a.x, b.y - a.y, 'Nudge');
+    this.drawing.moveSelected(b.x - a.x, b.y - a.y, t('Nudge'));
   }
 
   protected onBeforeUnload(e: BeforeUnloadEvent): void {

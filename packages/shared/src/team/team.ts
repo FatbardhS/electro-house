@@ -62,7 +62,7 @@ export const transferOwnershipSchema = z.object({ userId: z.uuid() });
 export const switchOrganizationSchema = z.object({ organizationId: z.uuid() });
 
 /** Sign-up from an invitation: the email and company come from the invitation. */
-export const invitationSignUpSchema = signUpSchema.pick({ name: true, password: true });
+export const invitationSignUpSchema = signUpSchema.pick({ name: true, password: true, language: true });
 export type InvitationSignUpInput = z.infer<typeof invitationSignUpSchema>;
 
 export type InvitationStatus = 'valid' | 'expired' | 'revoked' | 'used';

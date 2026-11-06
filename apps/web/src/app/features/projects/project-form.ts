@@ -5,59 +5,60 @@ import { PROJECT_STATUSES, projectCreateSchema, type ClientDto, type ProjectDto 
 import { Api } from '../../core/api';
 import { FormState } from '../../core/forms';
 import { STATUS_LABELS } from './status';
+import { I18N_PIPES } from '../../core/i18n/t.pipe';
 
 /** Create or edit a project. When `clientId` is given the client is fixed. */
 @Component({
   selector: 'app-project-form',
-  imports: [FormsModule],
+  imports: [I18N_PIPES, FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (form.formError(); as err) {
-      <div class="banner banner-error" role="alert" style="margin-bottom: 14px">{{ err }}</div>
+      <div class="banner banner-error" role="alert" style="margin-bottom: 14px">{{ err | tx }}</div>
     }
     <form (ngSubmit)="submit()" novalidate>
       @if (!clientId()) {
         <div class="field">
-          <label for="p-client">Client *</label>
+          <label for="p-client">{{ 'Client *' | t }}</label>
           @if (clients.hasValue()) {
             <select id="p-client" class="input" name="clientId" [(ngModel)]="model.clientId"
                     [class.invalid]="form.error('clientId')">
-              <option value="">Choose a client…</option>
+              <option value="">{{ 'Choose a client…' | t }}</option>
               @for (c of clients.value(); track c.id) { <option [value]="c.id">{{ c.name }}</option> }
             </select>
             @if (clients.value().length === 0) {
-              <span class="faint" style="font-size: 12px">No clients yet. Create a client first.</span>
+              <span class="faint" style="font-size: 12px">{{ 'No clients yet. Create a client first.' | t }}</span>
             }
           } @else if (clients.error()) {
-            <span class="field-error">Could not load clients.</span>
+            <span class="field-error">{{ 'Could not load clients.' | t }}</span>
           } @else {
-            <span class="faint">Loading clients…</span>
+            <span class="faint">{{ 'Loading clients…' | t }}</span>
           }
-          @if (form.error('clientId'); as e) { <span class="field-error">{{ e }}</span> }
+          @if (form.error('clientId'); as e) { <span class="field-error">{{ e | tx }}</span> }
         </div>
       }
       <div class="field">
-        <label for="p-name">Project name *</label>
+        <label for="p-name">{{ 'Project name *' | t }}</label>
         <input id="p-name" class="input" name="name" [(ngModel)]="model.name" [class.invalid]="form.error('name')"
-               placeholder="e.g. Family house renovation" />
-        @if (form.error('name'); as e) { <span class="field-error">{{ e }}</span> }
+               [placeholder]="'e.g. Family house renovation' | t" />
+        @if (form.error('name'); as e) { <span class="field-error">{{ e | tx }}</span> }
       </div>
       <div class="field">
-        <label for="p-address">Property address</label>
+        <label for="p-address">{{ 'Property address' | t }}</label>
         <input id="p-address" class="input" name="propertyAddress" [(ngModel)]="model.propertyAddress" />
       </div>
       <div class="field">
-        <label for="p-status">Status</label>
+        <label for="p-status">{{ 'Status' | t }}</label>
         <select id="p-status" class="input" name="status" [(ngModel)]="model.status">
-          @for (s of statuses; track s) { <option [value]="s">{{ labels[s] }}</option> }
+          @for (s of statuses; track s) { <option [value]="s">{{ labels[s] | t }}</option> }
         </select>
       </div>
       <div class="field">
-        <label for="p-desc">Description</label>
+        <label for="p-desc">{{ 'Description' | t }}</label>
         <textarea id="p-desc" class="input" name="description" [(ngModel)]="model.description"></textarea>
       </div>
       <div class="form-actions">
-        <button class="btn" type="button" (click)="cancelled.emit()">Cancel</button>
+        <button class="btn" type="button" (click)="cancelled.emit()">{{ 'Cancel' | t }}</button>
         <button class="btn btn-primary" type="submit" [disabled]="form.submitting()">
           {{ form.submitting() ? 'Saving…' : project() ? 'Save changes' : 'Create project' }}
         </button>

@@ -4,6 +4,7 @@ import { MAX_OPS_PER_PATCH } from '@electro/shared';
 import { toApiError, type ApiError } from '../../../core/api-error';
 import type { Journal } from './journal';
 import type { SaveStatus } from './floor-sync';
+import { t, tx } from '../../../core/i18n/i18n.service';
 
 export interface DrawingApi {
   getDrawing(floorId: string): Promise<DrawingDto>;
@@ -24,6 +25,14 @@ const RETRY_MS = [2_000, 5_000, 10_000, 30_000];
  * journal first, batched saves with the drawing revision, re-apply on 409, retry while offline.
  */
 export class DrawingSync {
+  /** The current notice is the offline / retrying one (cleared once a save succeeds). */
+  private retryNotice = false;
+
+  private setNotice(text: string | null): void {
+    this.retryNotice = false;
+    this.message.set(text);
+  }
+
   readonly status = signal<SaveStatus>('saved');
   readonly message = signal<string | null>(null);
 
@@ -58,7 +67,7 @@ export class DrawingSync {
       const ops = this.opsOf(this.pending);
       if (ops.length === 0) return [];
       this.status.set('pending');
-      this.message.set('Restored drawing changes that had not been saved yet.');
+      this.setNotice(t('Restored drawing changes that had not been saved yet.'));
       this.schedule(0);
       return ops;
     } catch {
@@ -82,7 +91,7 @@ export class DrawingSync {
       }
     }
     this.status.set('pending');
-    this.message.set(null);
+    this.setNotice(null);
     void this.writeJournal();
     this.schedule(DEBOUNCE_MS);
   }
@@ -130,7 +139,7 @@ export class DrawingSync {
       if (this.opsOf(this.pending).length === 0) {
         await this.journal.delete(this.key).catch(() => undefined);
         this.status.set('saved');
-        if (/^(Offline|Saving failed)/.test(this.message() ?? '')) this.message.set(null);
+        if (this.retryNotice) this.setNotice(null);
       } else {
         this.status.set('pending');
         void this.writeJournal();
@@ -144,7 +153,7 @@ export class DrawingSync {
           const server = await this.api.getDrawing(this.floorId);
           this.revision = server.revision;
           this.onServerState(server, this.opsOf(this.pending));
-          this.message.set('This drawing was also changed elsewhere; your changes were applied on top.');
+          this.setNotice(t('This drawing was also changed elsewhere; your changes were applied on top.'));
           return await this.send(false);
         } catch (inner) {
           return this.fail(toApiError(inner));
@@ -155,7 +164,7 @@ export class DrawingSync {
         this.pending = { components: {}, layers: {} };
         await this.journal.delete(this.key).catch(() => undefined);
         this.status.set('error');
-        this.message.set(`Change not saved: ${e.message}`);
+        this.setNotice(t('Change not saved: {reason}', { reason: tx(e.message) }));
         try {
           const server = await this.api.getDrawing(this.floorId);
           this.revision = server.revision;
@@ -192,11 +201,12 @@ export class DrawingSync {
   }
 
   private fail(e: ApiError): void {
+    this.retryNotice = true;
     this.status.set(e.isNetwork ? 'offline' : 'error');
     this.message.set(
       e.isNetwork
-        ? 'Offline: drawing changes are kept on this device and will be saved when the connection returns.'
-        : `Saving failed (${e.message}). Retrying automatically.`,
+        ? t('Offline: drawing changes are kept on this device and will be saved when the connection returns.')
+        : t('Saving failed ({reason}). Retrying automatically.', { reason: tx(e.message) }),
     );
     void this.writeJournal();
     if (this.disposed) return;

@@ -11,6 +11,7 @@ import {
 } from '@angular/core';
 import type { PDFPageProxy, RenderTask } from 'pdfjs-dist';
 import { pageScreenRect, type Size, type ViewState } from '@electro/shared';
+import { t } from '../../../core/i18n/i18n.service';
 
 /** Largest bitmap we render (pixels). Beyond this the effective device-pixel ratio is reduced. */
 const MAX_CANVAS_PIXELS = 16_000_000;
@@ -129,7 +130,7 @@ export class PdfLayer implements OnDestroy {
     off.height = height;
     const ctx = off.getContext('2d', { alpha: true });
     if (!ctx) {
-      this.renderError.emit('The plan could not be drawn: this browser could not create a drawing canvas.');
+      this.renderError.emit(t('The plan could not be drawn: this browser could not create a drawing canvas.'));
       return;
     }
 
@@ -152,7 +153,7 @@ export class PdfLayer implements OnDestroy {
       await this.task.promise;
     } catch (err) {
       if ((err as { name?: string }).name === 'RenderingCancelledException' || this.destroyed) return;
-      this.renderError.emit(`The plan could not be drawn: ${(err as Error).message}`);
+      this.renderError.emit(t('The plan could not be drawn: {reason}', { reason: (err as Error).message }));
       return;
     } finally {
       this.task = null;

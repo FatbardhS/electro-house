@@ -1,25 +1,28 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { I18N_PIPES } from '../../core/i18n/t.pipe';
 
 /** Loading placeholder. */
 @Component({
   selector: 'app-loading',
+  imports: [I18N_PIPES],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<div class="state"><div class="spinner"></div><span class="muted">{{ label() }}</span></div>`,
+  template: `<div class="state"><div class="spinner"></div><span class="muted">{{ label() ?? ('Loading…' | t) }}</span></div>`,
   styleUrl: './states.css',
 })
 export class LoadingState {
-  readonly label = input('Loading…');
+  readonly label = input<string | null>(null);
 }
 
 /** Error with an optional retry button. */
 @Component({
   selector: 'app-error-state',
+  imports: [I18N_PIPES],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="state">
-      <div class="banner banner-error" role="alert">{{ message() }}</div>
+      <div class="banner banner-error" role="alert">{{ message() | tx }}</div>
       @if (retryable()) {
-        <button class="btn btn-sm" type="button" (click)="retry.emit()">Try again</button>
+        <button class="btn btn-sm" type="button" (click)="retry.emit()">{{ 'Try again' | t }}</button>
       }
     </div>
   `,

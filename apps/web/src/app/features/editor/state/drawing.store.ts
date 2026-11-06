@@ -14,6 +14,7 @@ import {
   type WireDto,
 } from '@electro/shared';
 import { applyOps, applyWireOps, type DrawingSync } from './drawing-sync';
+import { t } from '../../../core/i18n/i18n.service';
 
 /** One object's state before and after a change (null = does not exist). */
 export type Change =
@@ -266,7 +267,7 @@ export class DrawingStore {
 
   // ── commands ──
 
-  add(components: ComponentDto[], label = components.length === 1 ? 'Add component' : `Add ${components.length} components`, wires: WireDto[] = []): void {
+  add(components: ComponentDto[], label = components.length === 1 ? t('Add component') : t('Add {n} components', { n: components.length }), wires: WireDto[] = []): void {
     this.execute({
       label,
       changes: [
@@ -322,7 +323,7 @@ export class DrawingStore {
       .map((w) => ({ kind: 'wire' as const, id: w.id, before: w, after: detachEnds(w, delIds, lookup) }))
       .filter((c) => c.before !== c.after);
     this.execute({
-      label: n === 1 ? (comps.length ? 'Delete component' : 'Delete wire') : `Delete ${n} objects`,
+      label: n === 1 ? (comps.length ? t('Delete component') : t('Delete wire')) : t('Delete {n} objects', { n }),
       changes: [
         ...selWires.map((w): Change => ({ kind: 'wire', id: w.id, before: w, after: null })),
         ...detached,
@@ -338,11 +339,11 @@ export class DrawingStore {
     if (sel.length === 0) return;
     this.update(
       sel.map((c) => ({ ...c, rotation: normalizeDegrees(c.rotation + degrees) })),
-      sel.length === 1 ? 'Rotate component' : `Rotate ${sel.length} components`,
+      sel.length === 1 ? t('Rotate component') : t('Rotate {n} components', { n: sel.length }),
     );
   }
 
-  moveSelected(dx: number, dy: number, label = 'Move'): void {
+  moveSelected(dx: number, dy: number, label = t('Move')): void {
     const compIds = new Set(this.selected().map((c) => c.id));
     const wireIds = new Set(this.selectedWires().map((w) => w.id));
     if (!compIds.size && !wireIds.size) return;
@@ -360,7 +361,7 @@ export class DrawingStore {
       ...comps.map((c): Change => ({ kind: 'component', id: c.id, before: c, after: { ...c, circuitId } })),
       ...wires.map((w): Change => ({ kind: 'wire', id: w.id, before: w, after: { ...w, circuitId } })),
     ];
-    this.execute({ label: circuitId ? 'Assign to circuit' : 'Remove from circuit', changes });
+    this.execute({ label: circuitId ? t('Assign to circuit') : t('Remove from circuit'), changes });
     return changes.length;
   }
 

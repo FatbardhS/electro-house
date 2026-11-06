@@ -34,6 +34,7 @@ import { PdfLayer } from './pdf/pdf-layer';
 import { DrawingStore } from './state/drawing.store';
 import { ToolsStore, constrainOrthogonal } from './state/tools.store';
 import { ViewportStore } from './viewport/viewport.store';
+import { t } from '../../core/i18n/i18n.service';
 
 const WHEEL_ZOOM_SPEED = 0.0015;
 /** Pointer must move this far (px) before a press becomes a drag. */
@@ -60,7 +61,7 @@ type Gesture =
   host: {
     '[class]': 'cursorClass()',
     tabindex: '0',
-    'aria-label': 'Floor plan workspace',
+    '[attr.aria-label]': 'ariaLabel()',
     '(pointerdown)': 'onPointerDown($event)',
     '(pointermove)': 'onPointerMove($event)',
     '(pointerup)': 'onPointerUp($event)',
@@ -93,6 +94,7 @@ type Gesture =
   `,
 })
 export class Workspace {
+  protected readonly ariaLabel = () => t('Floor plan workspace');
   protected readonly viewport = inject(ViewportStore);
   protected readonly tools = inject(ToolsStore);
   private readonly drawing = inject(DrawingStore);
@@ -299,12 +301,12 @@ export class Workspace {
 
     if (g.kind === 'move' && g.dragging) {
       const n = g.snap.components.length + g.wireIds.size;
-      this.drawing.commitPreview(n === 1 ? (g.snap.components.length ? 'Move component' : 'Move wire') : `Move ${n} objects`, g.snap);
+      this.drawing.commitPreview(n === 1 ? (g.snap.components.length ? t('Move component') : t('Move wire')) : t('Move {n} objects', { n }), g.snap);
     } else if (g.kind === 'handle' && g.dragging) {
       const p = this.viewport.toPlan(this.local(e));
       this.drawing.preview({ wires: [g.wire] }); // restore, then record one clean step
       if (p) {
-        const label = g.handle.kind === 'end' ? 'Reconnect wire' : g.handle.kind === 'mid' ? 'Add bend' : 'Move bend';
+        const label = g.handle.kind === 'end' ? t('Reconnect wire') : g.handle.kind === 'mid' ? t('Add bend') : t('Move bend');
         this.drawing.updateWires([this.editedWire(g.wire, g.handle, this.snapped(p, e.altKey), true)], label);
       }
     } else if (g.kind === 'box') {
@@ -347,7 +349,7 @@ export class Workspace {
       const h = this.handleUnder(this.local(e));
       if (h?.handle.kind === 'vertex') {
         const w = h.wire;
-        this.drawing.updateWires([{ ...w, points: w.points.filter((_, i) => i !== (h.handle as { index: number }).index) }], 'Remove bend');
+        this.drawing.updateWires([{ ...w, points: w.points.filter((_, i) => i !== (h.handle as { index: number }).index) }], t('Remove bend'));
       }
     }
   }

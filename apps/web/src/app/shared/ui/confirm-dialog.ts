@@ -8,6 +8,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { I18N_PIPES } from '../../core/i18n/t.pipe';
 
 export interface ConfirmOptions {
   title: string;
@@ -29,6 +30,7 @@ export class ConfirmService {
 
 @Component({
   selector: 'app-confirm-dialog',
+  imports: [I18N_PIPES],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <dialog #dlg class="modal" (cancel)="answer(false)">
@@ -37,7 +39,7 @@ export class ConfirmService {
         <div class="modal-body">
           <p class="muted" style="margin-top: 0; white-space: pre-line">{{ c.message }}</p>
           <div class="form-actions">
-            <button class="btn" type="button" (click)="answer(false)">Cancel</button>
+            <button class="btn" type="button" (click)="answer(false)">{{ 'Cancel' | t }}</button>
             <button
               class="btn"
               [class.btn-primary]="!c.danger"
@@ -45,7 +47,7 @@ export class ConfirmService {
               type="button"
               (click)="answer(true)"
             >
-              {{ c.confirmLabel ?? 'Confirm' }}
+              {{ c.confirmLabel ?? ('Confirm' | t) }}
             </button>
           </div>
         </div>

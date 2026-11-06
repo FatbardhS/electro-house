@@ -16,6 +16,8 @@ import {
 import { Api } from '../../core/api';
 import { toApiError } from '../../core/api-error';
 import { EmptyState } from '../../shared/ui/states';
+import { I18N_PIPES } from '../../core/i18n/t.pipe';
+import { I18n, t, tx } from '../../core/i18n/i18n.service';
 
 interface Draft {
   kind: 'component' | 'cable';
@@ -36,23 +38,23 @@ const EMPTY: Draft = { kind: 'component', typeKey: '', cableType: 'NYM-J', condu
  */
 @Component({
   selector: 'app-material-rules',
-  imports: [EmptyState],
+  imports: [I18N_PIPES, EmptyState],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    @if (error(); as e) { <div class="banner banner-error" role="alert">{{ e }}</div> }
+    @if (error(); as e) { <div class="banner banner-error" role="alert">{{ e | tx }}</div> }
     @if (!readonly()) {
       <form class="card add" (submit)="$event.preventDefault(); add()">
-        <h3>New rule</h3>
+        <h3>{{ 'New rule' | t }}</h3>
         <div class="grid">
-          <label class="f"><span>For</span>
+          <label class="f"><span>{{ 'For' | t }}</span>
             <select class="input" (change)="patch({ kind: $any(val($event)) })">
-              <option value="component" [selected]="draft().kind === 'component'">a component type</option>
-              <option value="cable" [selected]="draft().kind === 'cable'">a cable (per metre)</option>
+              <option value="component" [selected]="draft().kind === 'component'">{{ 'a component type' | t }}</option>
+              <option value="cable" [selected]="draft().kind === 'cable'">{{ 'a cable (per metre)' | t }}</option>
             </select></label>
           @if (draft().kind === 'component') {
-            <label class="f wide"><span>Component type</span>
+            <label class="f wide"><span>{{ 'Component type' | t }}</span>
               <select class="input" (change)="patch({ typeKey: val($event) })">
-                <option value="" [selected]="!draft().typeKey">— choose —</option>
+                <option value="" [selected]="!draft().typeKey">— {{ 'choose' | t }} —</option>
                 @for (g of typeGroups; track g.name) {
                   <optgroup [label]="g.name">
                     @for (t of g.types; track t.key) { <option [value]="t.key" [selected]="t.key === draft().typeKey">{{ t.name }}</option> }
@@ -60,51 +62,51 @@ const EMPTY: Draft = { kind: 'component', typeKey: '', cableType: 'NYM-J', condu
                 }
               </select></label>
           } @else {
-            <label class="f"><span>Cable type</span>
+            <label class="f"><span>{{ 'Cable type' | t }}</span>
               <select class="input" (change)="patch({ cableType: val($event) })">
-                <option value="*" [selected]="draft().cableType === '*'">any</option>
+                <option value="*" [selected]="draft().cableType === '*'">{{ 'any' | t }}</option>
                 @for (t of cableTypes; track t) { <option [value]="t" [selected]="t === draft().cableType">{{ t }}</option> }
               </select></label>
-            <label class="f"><span>Cores</span>
+            <label class="f"><span>{{ 'Cores' | t }}</span>
               <select class="input" (change)="patch({ conductors: val($event) })">
-                <option value="*" [selected]="draft().conductors === '*'">any</option>
+                <option value="*" [selected]="draft().conductors === '*'">{{ 'any' | t }}</option>
                 @for (n of cores; track n) { <option [value]="n" [selected]="String(n) === draft().conductors">{{ n }}</option> }
               </select></label>
-            <label class="f"><span>Cross-section (mm²)</span>
+            <label class="f"><span>{{ 'Cross-section (mm²)' | t }}</span>
               <select class="input" (change)="patch({ crossSection: val($event) })">
-                <option value="*" [selected]="draft().crossSection === '*'">any</option>
+                <option value="*" [selected]="draft().crossSection === '*'">{{ 'any' | t }}</option>
                 @for (s of sections; track s) { <option [value]="s" [selected]="String(s) === draft().crossSection">{{ s }}</option> }
               </select></label>
           }
-          <label class="f wide"><span>Material</span>
+          <label class="f wide"><span>{{ 'Material' | t }}</span>
             <select class="input" (change)="patch({ materialId: val($event) })">
-              <option value="" [selected]="!draft().materialId">— choose from the price list —</option>
+              <option value="" [selected]="!draft().materialId">— {{ 'choose from the price list' | t }} —</option>
               @for (m of activeMaterials(); track m.id) { <option [value]="m.id" [selected]="m.id === draft().materialId">{{ m.name }}{{ m.code ? ' (' + m.code + ')' : '' }} · {{ m.unit }}</option> }
             </select></label>
-          <label class="f"><span>{{ draft().kind === 'cable' ? 'Quantity per metre' : 'Quantity per component' }}</span>
+          <label class="f"><span>{{ (draft().kind === 'cable' ? 'Quantity per metre' : 'Quantity per component') | t }}</span>
             <input class="input mono" type="number" min="0" step="0.01" [value]="draft().quantity" (input)="patch({ quantity: val($event) })" /></label>
-          <label class="f"><span>{{ draft().kind === 'cable' ? 'Labour min per metre' : 'Labour min per component' }}</span>
+          <label class="f"><span>{{ (draft().kind === 'cable' ? 'Labour min per metre' : 'Labour min per component') | t }}</span>
             <input class="input mono" type="number" min="0" step="0.5" [value]="draft().labourMinutes" (input)="patch({ labourMinutes: val($event) })" /></label>
         </div>
         <div class="actions">
-          <span class="faint small">Target: <strong>{{ draftLabel() }}</strong>. Several rules for the same target add several materials.</span>
-          <button class="btn btn-primary btn-sm" type="submit" [disabled]="busy()">Add rule</button>
+          <span class="faint small">{{ 'Target' | t }}: <strong>{{ draftLabel() }}</strong>. {{ 'Several rules for the same target add several materials.' | t }}</span>
+          <button class="btn btn-primary btn-sm" type="submit" [disabled]="busy()">{{ 'Add rule' | t }}</button>
         </div>
       </form>
     }
 
     @if (groups().length === 0) {
-      <div class="card"><app-empty-state heading="No material rules yet"
-        text="Rules turn the plans into a material list: e.g. a double outlet uses 1 flush box, 1 socket and 1 frame." /></div>
+      <div class="card"><app-empty-state [heading]="'No material rules yet' | t"
+        [text]="'Rules turn the plans into a material list: e.g. a double outlet uses 1 flush box, 1 socket and 1 frame.' | t" /></div>
     } @else {
       <div class="card scroll">
         <table class="table dense">
-          <thead><tr><th>For</th><th>Material</th><th class="num">Quantity</th><th>Unit</th><th class="num">Labour min</th><th></th></tr></thead>
+          <thead><tr><th>{{ 'For' | t }}</th><th>{{ 'Material' | t }}</th><th class="num">{{ 'Quantity' | t }}</th><th>{{ 'Unit' | t }}</th><th class="num">{{ 'Labour min' | t }}</th><th></th></tr></thead>
           <tbody>
             @for (g of groups(); track g.target) {
               @for (r of g.rules; track r.id; let first = $first) {
                 <tr [class.first]="first">
-                  <td>@if (first) { <strong>{{ g.label }}</strong> <span class="faint small">{{ g.kind }}</span> }</td>
+                  <td>@if (first) { <strong>{{ g.label | tx }}</strong> <span class="faint small">{{ (g.kind === 'cable' ? 'cable' : 'component') | t }}</span> }</td>
                   <td>
                     <select class="cell" (change)="save(r, { materialId: val($event) })" [disabled]="readonly()">
                       @for (m of materials(); track m.id) {
@@ -114,7 +116,7 @@ const EMPTY: Draft = { kind: 'component', typeKey: '', cableType: 'NYM-J', condu
                   <td class="num"><input class="cell mono w5 r" type="number" min="0" step="0.01" [value]="r.quantity" (change)="saveNum(r, 'quantity', $event)" [disabled]="readonly()" /></td>
                   <td class="faint">{{ unitOf(r.materialId) }}{{ g.kind === 'cable' ? ' / m' : '' }}</td>
                   <td class="num"><input class="cell mono w5 r" type="number" min="0" step="0.5" [value]="r.labourMinutes" (change)="saveNum(r, 'labourMinutes', $event)" [disabled]="readonly()" /></td>
-                  <td>@if (!readonly()) { <button class="btn btn-sm btn-ghost btn-danger" type="button" (click)="remove(r)" aria-label="Delete rule">✕</button> }</td>
+                  <td>@if (!readonly()) { <button class="btn btn-sm btn-ghost btn-danger" type="button" (click)="remove(r)" [attr.aria-label]="'Delete rule' | t">✕</button> }</td>
                 </tr>
               }
             }
@@ -204,15 +206,15 @@ export class MaterialRules {
 
   protected async add(): Promise<void> {
     const d = this.draft();
-    if (!this.draftTarget()) return this.error.set('Choose the component type.');
-    if (!d.materialId) return this.error.set('Choose a material from the price list.');
+    if (!this.draftTarget()) return this.error.set(t('Choose the component type.'));
+    if (!d.materialId) return this.error.set(t('Choose a material from the price list.'));
     const check = materialRuleInputSchema.safeParse({
       target: this.draftTarget(),
       materialId: d.materialId,
       quantity: Number(d.quantity),
       labourMinutes: Number(d.labourMinutes || 0),
     });
-    if (!check.success) return this.error.set(check.error.issues[0]?.message ?? 'Invalid rule.');
+    if (!check.success) return this.error.set(check.error.issues[0]?.message ?? t('Invalid rule.'));
     await this.run(async () => {
       await this.api.createRule(check.data);
       this.draft.update((x) => ({ ...x, materialId: '', quantity: '1', labourMinutes: '0' }));
@@ -227,7 +229,7 @@ export class MaterialRules {
   protected async save(r: MaterialRuleDto, patch: Partial<MaterialRuleInput>): Promise<void> {
     const check = materialRuleUpdateSchema.safeParse(patch);
     if (!check.success) {
-      this.error.set(check.error.issues[0]?.message ?? 'Invalid value.');
+      this.error.set(check.error.issues[0]?.message ?? t('Invalid value.'));
       return;
     }
     await this.run(() => this.api.updateRule(r.id, check.data));

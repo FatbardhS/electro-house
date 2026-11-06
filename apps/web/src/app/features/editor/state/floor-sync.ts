@@ -2,6 +2,7 @@ import { computed, signal } from '@angular/core';
 import type { FloorDto, FloorSettingsInput } from '@electro/shared';
 import { ApiError, toApiError } from '../../../core/api-error';
 import type { Journal } from './journal';
+import { t, tx } from '../../../core/i18n/i18n.service';
 
 /** Floor fields the editor can change. */
 export type FloorSettingsPatch = Omit<FloorSettingsInput, 'baseRevision'>;
@@ -24,6 +25,14 @@ const RETRY_MS = [2_000, 5_000, 10_000, 30_000];
  *  4. On network/server failure the change stays in the journal and is retried with back-off.
  */
 export class FloorSync {
+  /** The current notice is the offline / retrying one (cleared once a save succeeds). */
+  private retryNotice = false;
+
+  private setNotice(text: string | null): void {
+    this.retryNotice = false;
+    this.message.set(text);
+  }
+
   private server: FloorDto;
   private pending: FloorSettingsPatch = {};
   private inflight: Promise<void> | null = null;
@@ -61,7 +70,7 @@ export class FloorSync {
       this.pending = { ...entry.patch, ...this.pending };
       this.applyLocal();
       this.status.set('pending');
-      this.message.set('Restored changes that had not been saved yet.');
+      this.setNotice(t('Restored changes that had not been saved yet.'));
       await this.flush();
       return true;
     } catch {
@@ -71,7 +80,7 @@ export class FloorSync {
 
   update(patch: FloorSettingsPatch): void {
     if (this.disposed) return;
-    this.message.set(null);
+    this.setNotice(null);
     this.pending = { ...this.pending, ...patch };
     this.applyLocal();
     this.status.set('pending');
@@ -116,7 +125,7 @@ export class FloorSync {
         await this.journal.delete(this.key).catch(() => undefined);
         this.status.set('saved');
         // Informational notices (restored / merged) stay visible until the next edit.
-        if (this.status() === 'saved' && /^(Offline|Saving failed)/.test(this.message() ?? '')) this.message.set(null);
+        if (this.status() === 'saved' && this.retryNotice) this.setNotice(null);
       } else {
         this.status.set('pending');
         void this.writeJournal();
@@ -132,7 +141,7 @@ export class FloorSync {
         try {
           this.server = await this.api.getFloor(this.server.id);
           this.applyLocal();
-          this.message.set('This floor was also changed elsewhere; your latest changes were applied on top.');
+          this.setNotice(t('This floor was also changed elsewhere; your latest changes were applied on top.'));
           return await this.send(false);
         } catch (inner) {
           return this.fail(toApiError(inner));
@@ -144,7 +153,7 @@ export class FloorSync {
         await this.journal.delete(this.key).catch(() => undefined);
         this.applyLocal();
         this.status.set('error');
-        this.message.set(`Change not saved: ${e.message}`);
+        this.setNotice(t('Change not saved: {reason}', { reason: tx(e.message) }));
         return;
       }
       this.fail(e);
@@ -152,11 +161,12 @@ export class FloorSync {
   }
 
   private fail(e: ApiError): void {
+    this.retryNotice = true;
     this.status.set(e.isNetwork ? 'offline' : 'error');
     this.message.set(
       e.isNetwork
-        ? 'Offline: changes are kept on this device and will be saved when the connection returns.'
-        : `Saving failed (${e.message}). Retrying automatically.`,
+        ? t('Offline: changes are kept on this device and will be saved when the connection returns.')
+        : t('Saving failed ({reason}). Retrying automatically.', { reason: tx(e.message) }),
     );
     if (this.disposed) return;
     const delay = RETRY_MS[Math.min(this.retryIndex++, RETRY_MS.length - 1)]!;

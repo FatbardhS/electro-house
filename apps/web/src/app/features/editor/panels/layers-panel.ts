@@ -2,28 +2,30 @@ import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { LAYER_NAMES } from '@electro/shared';
 import { LAYER_COLORS } from '../drawing/symbol-defs';
 import { DrawingStore } from '../state/drawing.store';
+import { I18N_PIPES } from '../../../core/i18n/t.pipe';
 
 /** Show/hide and lock each drawing layer of the floor. */
 @Component({
   selector: 'app-layers-panel',
+  imports: [I18N_PIPES],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="row bg">
       <span class="swatch" style="background: #fff"></span>
-      <span class="name">Architectural plan (PDF)</span>
-      <span class="faint hint">use the lock in the tool rail</span>
+      <span class="name">{{ 'Architectural plan (PDF)' | t }}</span>
+      <span class="faint hint">{{ 'use the lock in the tool rail' | t }}</span>
     </div>
     @for (l of drawing.layers(); track l.key) {
       <div class="row" [class.hidden]="!l.visible">
         <span class="swatch" [style.background]="colors[l.key]"></span>
-        <span class="name">{{ names[l.key] }}</span>
+        <span class="name">{{ names[l.key] | tx }}</span>
         <span class="count faint">{{ drawing.countsByLayer().get(l.key) ?? 0 }}</span>
         <button class="btn btn-sm btn-icon btn-ghost" type="button" (click)="drawing.setLayer(l.key, { visible: !l.visible })"
-                [attr.aria-label]="(l.visible ? 'Hide ' : 'Show ') + names[l.key]" [title]="l.visible ? 'Hide layer' : 'Show layer'">
+                [attr.aria-label]="(l.visible ? 'Hide {name}' : 'Show {name}') | t: { name: (names[l.key] | tx) }" [title]="(l.visible ? 'Hide layer' : 'Show layer') | t">
           {{ l.visible ? '👁' : '—' }}
         </button>
         <button class="btn btn-sm btn-icon btn-ghost" type="button" [class.on]="l.locked" (click)="drawing.setLayer(l.key, { locked: !l.locked })"
-                [attr.aria-label]="(l.locked ? 'Unlock ' : 'Lock ') + names[l.key]" [title]="l.locked ? 'Unlock layer' : 'Lock layer (objects cannot be selected)'">
+                [attr.aria-label]="(l.locked ? 'Unlock {name}' : 'Lock {name}') | t: { name: (names[l.key] | tx) }" [title]="(l.locked ? 'Unlock layer' : 'Lock layer (objects cannot be selected)') | t">
           {{ l.locked ? '🔒' : '🔓' }}
         </button>
       </div>

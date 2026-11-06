@@ -3,34 +3,36 @@ import { CATEGORIES, CATEGORY_NAMES, searchCatalog, type Category, type Componen
 import { LAYER_COLORS, symbolId } from '../drawing/symbol-defs';
 import { ToolsStore } from '../state/tools.store';
 import { DRAG_MIME } from '../workspace';
+import { I18N_PIPES } from '../../../core/i18n/t.pipe';
 
 /** Electrical component library: search, categories, click to place, or drag onto the plan. */
 @Component({
   selector: 'app-library-panel',
+  imports: [I18N_PIPES],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <input class="input search" type="search" placeholder="Search components…" aria-label="Search components"
+    <input class="input search" type="search" [placeholder]="'Search components…' | t" [attr.aria-label]="'Search components' | t"
            [value]="query()" (input)="query.set($any($event.target).value)" />
     <div class="groups">
       @for (g of groups(); track g.category) {
         <section>
           <button class="cat" type="button" (click)="toggle(g.category)" [attr.aria-expanded]="isOpen(g.category)">
-            <span>{{ names[g.category] }}</span><span class="faint">{{ g.items.length }} {{ isOpen(g.category) ? '▾' : '▸' }}</span>
+            <span>{{ names[g.category] | tx }}</span><span class="faint">{{ g.items.length }} {{ isOpen(g.category) ? '▾' : '▸' }}</span>
           </button>
           @if (isOpen(g.category)) {
             <div class="items">
               @for (t of g.items; track t.key) {
                 <button class="item" type="button" draggable="true" [class.active]="tools.placeType() === t.key"
-                        (click)="tools.place(t.key)" (dragstart)="onDragStart($event, t)" [title]="t.name + ' (click, then click on the plan; or drag onto the plan)'">
+                        (click)="tools.place(t.key)" (dragstart)="onDragStart($event, t)" [title]="'{name} (click, then click on the plan; or drag onto the plan)' | t: { name: (t.name | tx) }">
                   <svg viewBox="-7 -7 14 14" [style.color]="colors[t.defaultLayer]" aria-hidden="true"><use [attr.href]="'#' + id(t.key)" /></svg>
-                  <span>{{ t.name }}</span>
+                  <span>{{ t.name | tx }}</span>
                 </button>
               }
             </div>
           }
         </section>
       } @empty {
-        <p class="faint empty">No components match “{{ query() }}”.</p>
+        <p class="faint empty">{{ 'No components match “{q}”.' | t: { q: query() } }}</p>
       }
     </div>
   `,

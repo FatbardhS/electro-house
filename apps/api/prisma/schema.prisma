@@ -50,6 +50,8 @@ model User {
   passwordHash String
   /// Company opened at sign-in (the one used last). Null = the first membership.
   lastOrganizationId String? @db.Uuid
+  /// Interface language: "sq" (Albanian, default) or "en".
+  language     String       @default("sq")
   createdAt    DateTime     @default(now())
   memberships  Membership[]
   sessions     Session[]
