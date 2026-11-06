@@ -22,11 +22,13 @@ import { PricingController } from './pricing/pricing.controller.js';
 import { PricingService } from './pricing/pricing.service.js';
 import { ExportController } from './exports/export.controller.js';
 import { ExportService } from './exports/export.service.js';
+import { BillingModule } from './billing/billing.module.js';
 
 @Module({
   imports: [
     PrismaModule,
     StorageModule,
+    BillingModule,
     // Rate limits (stricter ones on sign-in/up). Disabled only under the automated test runner.
     ThrottlerModule.forRoot({
       throttlers: [{ ttl: 60_000, limit: 600 }],

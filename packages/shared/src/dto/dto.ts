@@ -1,3 +1,4 @@
+import type { BillingSummary } from '../billing/billing.js';
 import type { Calibration } from '../calibration/calibration.js';
 import type { PlanRotation } from '../geometry/view-transform.js';
 import type { ProjectStatus } from '../schemas/schemas.js';
@@ -14,6 +15,8 @@ export interface OrganizationDto {
   id: string;
   name: string;
   role: 'OWNER' | 'ADMIN' | 'MEMBER';
+  /** Subscription state for banners and read-only mode. */
+  billing: BillingSummary;
 }
 
 export interface SessionDto {

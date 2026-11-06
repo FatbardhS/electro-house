@@ -31,6 +31,7 @@ import {
   type ProjectDto,
 } from '@electro/shared';
 import { Api } from '../../core/api';
+import { AuthService } from '../../core/auth.service';
 import { errorMessage, toApiError } from '../../core/api-error';
 import { EmptyState, ErrorState, LoadingState } from '../../shared/ui/states';
 import { SymbolDefs } from './drawing/symbol-defs';
@@ -100,7 +101,11 @@ export class EditorPage {
   protected readonly viewport = inject(ViewportStore);
   protected readonly tools = inject(ToolsStore);
   protected readonly drawing = inject(DrawingStore);
+  private readonly auth = inject(AuthService);
   private readonly workspace = viewChild<Workspace>('ws');
+  /** Subscription inactive: the drawing can be viewed and exported but not changed. */
+  protected readonly readOnly = computed(() => this.auth.session()?.organization.billing.access === 'read-only');
+  private readonly syncReadOnly = effect(() => this.drawing.readOnly.set(this.readOnly()));
 
   readonly projectId = input.required<string>();
   readonly floorId = input.required<string>();

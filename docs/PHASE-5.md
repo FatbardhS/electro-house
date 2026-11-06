@@ -1,6 +1,6 @@
 # Phase 5: Reporting and billing
 
-Status: **5A implemented** (2026-11-06); 5B (billing) not started. Builds on Phases 1–4. Implementation notes in §11.
+Status: **5A and 5B implemented** (2026-11-06). 5B uses a development provider; the Paddle provider is written but not yet verified against a Paddle sandbox. Builds on Phases 1–4. Implementation notes in §11.
 
 Goal: from the drawn installation, an electrician gets a material list with prices, a cost estimate for the client,
 and printable vector PDFs of the plans and schedules. The app can then be sold as a subscription.
@@ -213,3 +213,28 @@ and whether seats are per user.
 - **Not done:** layers as PDF optional-content groups (toggleable in Acrobat) were left out, as allowed in §5; hidden
   layers are simply not drawn. No company logo upload limit beyond 300 kB, no quote versions (§8).
 - **Tests:** API e2e timeout raised to 20 s because the embedded `prisma dev` database sometimes stalls for 5–8 s.
+
+---
+
+## 12. 5B implementation notes (billing)
+
+- **Plan:** one plan, per user: EUR 29 / user / month or EUR 290 / user / year (net; the provider adds VAT).
+  Display prices live in `packages/shared/src/billing/billing.ts` (`PLAN`); the real prices are in the provider.
+- **Rules (shared code, used by API and web):** 14-day trial from sign-up; full access while trialing, active,
+  cancelled until the period end, or past due for up to 7 days; otherwise **read-only**. Existing companies received
+  a fresh 14-day trial in the `billing` migration.
+- **Enforcement:** the global session guard refuses every state-changing request with **402** while read-only, except
+  routes marked `@AllowReadOnly()` (sign-out, PDF export, billing). Reading always works. Data is never deleted.
+- **Providers** (`apps/api/src/billing/`): a provider-neutral interface with
+  - `dev` (default outside production): simulated checkout and portal inside the app; events are signed with a
+    per-process secret and go through the same webhook handling. Refused in production by env validation.
+  - `paddle`: Paddle Billing REST API (hosted checkout via a draft transaction, customer portal session),
+    webhook signature `Paddle-Signature: ts=…;h1=HMAC-SHA256(ts:rawBody)` with a 5-minute replay window.
+    **Not verified against a real Paddle account yet** — needs `PADDLE_*` settings (see `apps/api/.env.example`).
+- **Webhooks:** `POST /api/billing/webhooks/:provider`, verified on the raw body, stored in `BillingEvent` with a
+  unique (provider, event id), so retried deliveries are applied once. Events are applied in arrival order.
+- **Web:** Settings → Billing (status, trial, next payment, grace end, subscribe monthly/yearly, manage billing),
+  a banner under the top bar (trial ending, payment failed, cancelled, read-only), and a read-only editor that
+  ignores edits and says why.
+- **Not done:** seat changes after subscribing (there is no team-invite feature yet, so every company has one user);
+  out-of-order webhook protection by `occurred_at`; invoices are only available in the provider's portal.

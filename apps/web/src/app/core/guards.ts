@@ -39,6 +39,10 @@ export const sessionExpiredInterceptor: HttpInterceptorFn = (req, next) => {
         auth.markSignedOut();
         void router.navigate(['/sign-in'], { queryParams: { next: router.url } });
       }
+      // 402: the subscription just became inactive; refresh the session so banners and read-only mode appear.
+      if (err instanceof HttpErrorResponse && err.status === 402 && auth.session()?.organization.billing.access !== 'read-only') {
+        void auth.refresh();
+      }
       return throwError(() => err);
     }),
   );

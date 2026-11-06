@@ -8,13 +8,14 @@ import { ErrorState, LoadingState } from '../../shared/ui/states';
 import { CompanySettings } from './company-settings';
 import { MaterialRules } from './material-rules';
 import { PriceList } from './price-list';
+import { BillingPanel } from './billing-panel';
 
-type Tab = 'company' | 'prices' | 'rules';
+type Tab = 'company' | 'prices' | 'rules' | 'billing';
 
 /** Company-wide settings: prices and costs, price list, material rules. */
 @Component({
   selector: 'app-settings-page',
-  imports: [LoadingState, ErrorState, CompanySettings, PriceList, MaterialRules],
+  imports: [LoadingState, ErrorState, CompanySettings, PriceList, MaterialRules, BillingPanel],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="page wide">
@@ -30,7 +31,9 @@ type Tab = 'company' | 'prices' | 'rules';
         }
       </div>
 
-      @if (settings.error() || materials.error() || rules.error(); as err) {
+      @if (current() === 'billing') {
+        <app-billing-panel [devCheckout]="devCheckout()" [devPortal]="devPortal()" />
+      } @else if (settings.error() || materials.error() || rules.error(); as err) {
         <app-error-state [message]="message(err)" (retry)="reloadAll()" />
       } @else if (!settings.hasValue() || !materials.hasValue() || !rules.hasValue()) {
         <app-loading label="Loading settings…" />
@@ -62,14 +65,23 @@ export class SettingsPage {
   /** Query parameters (bound by the router). */
   readonly tab = input<string>();
   readonly target = input<string>();
+  readonly devCheckout = input<string | undefined>(undefined, { alias: 'dev-checkout' });
+  readonly devPortal = input<string | undefined>(undefined, { alias: 'dev-portal' });
 
   protected readonly tabs: { id: Tab; label: string }[] = [
     { id: 'company', label: 'Prices & costs' },
     { id: 'prices', label: 'Price list' },
     { id: 'rules', label: 'Material rules' },
+    { id: 'billing', label: 'Billing' },
   ];
-  protected readonly current = computed<Tab>(() => (['company', 'prices', 'rules'].includes(this.tab() ?? '') ? (this.tab() as Tab) : 'company'));
-  protected readonly readonly = computed(() => this.auth.session()?.organization.role === 'MEMBER');
+  protected readonly current = computed<Tab>(() =>
+    ['company', 'prices', 'rules', 'billing'].includes(this.tab() ?? '') ? (this.tab() as Tab) : 'company',
+  );
+  /** Members cannot change company settings; nobody can while the subscription is inactive. */
+  protected readonly readonly = computed(() => {
+    const org = this.auth.session()?.organization;
+    return org?.role === 'MEMBER' || org?.billing.access === 'read-only';
+  });
 
   protected readonly settings = httpResource<OrganizationSettings>(() => '/api/organization/settings');
   protected readonly materials = httpResource<MaterialDto[]>(() => '/api/materials');

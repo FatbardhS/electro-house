@@ -18,7 +18,7 @@ beforeAll(async () => {
   const { AppModule } = await import('../src/app.module.js');
   const { configureApp } = await import('../src/app.setup.js');
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
-  app = moduleRef.createNestApplication<NestExpressApplication>();
+  app = moduleRef.createNestApplication<NestExpressApplication>({ rawBody: true });
   configureApp(app as NestExpressApplication);
   await app.init();
 });
@@ -634,5 +634,113 @@ describe('PDF export', () => {
     await agent.post(`/api/projects/${project.id}/exports`).send({ ...DEFAULT_EXPORT_OPTIONS, sections: [] }).expect(400);
     const other = await signUp('Export Other Co');
     await other.agent.post(`/api/projects/${project.id}/exports`).send(DEFAULT_EXPORT_OPTIONS).expect(404);
+  });
+});
+
+describe('billing and read-only mode', () => {
+  async function prisma() {
+    const { PrismaService } = await import('../src/prisma/prisma.service.js');
+    return app.get(PrismaService);
+  }
+  async function devProvider() {
+    const { BILLING_PROVIDER } = await import('../src/billing/provider.js');
+    return app.get(BILLING_PROVIDER) as import('../src/billing/dev-provider.js').DevBillingProvider;
+  }
+  async function orgIdOf(agent: ReturnType<typeof request.agent>): Promise<string> {
+    return (await agent.get('/api/auth/me')).body.organization.id;
+  }
+  async function subscribe(agent: ReturnType<typeof request.agent>, interval: 'month' | 'year' = 'month') {
+    const { url } = (await agent.post('/api/billing/checkout').send({ interval }).expect(200)).body;
+    const token = new URL(url).searchParams.get('dev-checkout')!;
+    return (await agent.post('/api/billing/dev/complete').send({ token }).expect(200)).body as shared.BillingDto;
+  }
+
+  it('starts a 14-day trial on sign-up', async () => {
+    const { agent } = await signUp('Trial Co');
+    const me = (await agent.get('/api/auth/me')).body;
+    expect(me.organization.billing).toMatchObject({ status: 'trialing', access: 'full' });
+    expect(shared.daysUntil(me.organization.billing.trialEndsAt)).toBe(14);
+    expect((await agent.get('/api/billing').expect(200)).body).toMatchObject({ status: 'trialing', provider: 'dev', seats: 1, members: 1, hasSubscription: false });
+  });
+
+  it('makes an expired company read-only: reads and exports work, changes are refused with 402', async () => {
+    const { agent } = await signUp('Expired Co');
+    const client = (await agent.post('/api/clients').send({ name: 'C' }).expect(201)).body;
+    const project = (await agent.post('/api/projects').send({ clientId: client.id, name: 'P' }).expect(201)).body;
+    const db = await prisma();
+    await db.organization.update({ where: { id: await orgIdOf(agent) }, data: { trialEndsAt: new Date(Date.now() - 1000) } });
+
+    expect((await agent.get('/api/auth/me')).body.organization.billing).toMatchObject({ status: 'expired', access: 'read-only' });
+    const refused = await agent.post('/api/clients').send({ name: 'D' }).expect(402);
+    expect(refused.body.message).toBe(shared.READ_ONLY_MESSAGE);
+    await agent.patch(`/api/projects/${project.id}`).send({ name: 'Renamed' }).expect(402);
+    await agent.get('/api/clients').expect(200);
+    await agent.post(`/api/projects/${project.id}/exports`).send({ ...shared.DEFAULT_EXPORT_OPTIONS, sections: ['cover'] }).expect(200);
+
+    // Subscribing works while read-only and restores full access.
+    const billing = await subscribe(agent, 'year');
+    expect(billing).toMatchObject({ status: 'active', access: 'full', interval: 'year', hasSubscription: true });
+    await agent.post('/api/clients').send({ name: 'D' }).expect(201);
+    await agent.post('/api/auth/sign-out').expect(204);
+  });
+
+  it('applies each webhook once and rejects bad signatures', async () => {
+    const { agent } = await signUp('Webhook Co');
+    await subscribe(agent);
+    const org = await (await prisma()).organization.findUniqueOrThrow({ where: { id: await orgIdOf(agent) } });
+    const dev = await devProvider();
+    const delivery = dev.actionEvent('payment_failed', {
+      id: org.providerSubscriptionId!,
+      customerId: org.providerCustomerId,
+      organizationId: org.id,
+      status: 'active',
+      interval: 'month',
+      seats: 1,
+      currentPeriodEnd: org.currentPeriodEnd,
+      cancelAtPeriodEnd: false,
+    });
+    const post = () => request(app.getHttpServer()).post('/api/billing/webhooks/dev').set(delivery.headers).set('Content-Type', 'application/json').send(delivery.body.toString());
+    expect((await post().expect(200)).body).toEqual({ received: true, duplicate: false });
+    expect((await post().expect(200)).body).toEqual({ received: true, duplicate: true });
+    expect((await agent.get('/api/billing')).body).toMatchObject({ status: 'past_due', access: 'full' });
+
+    await request(app.getHttpServer())
+      .post('/api/billing/webhooks/dev')
+      .set({ 'x-dev-signature': 'f'.repeat(64) })
+      .set('Content-Type', 'application/json')
+      .send(delivery.body.toString())
+      .expect(400);
+    await request(app.getHttpServer()).post('/api/billing/webhooks/paddle').send({}).expect(404);
+  });
+
+  it('keeps access during the payment grace period and until a cancelled period ends', async () => {
+    const { agent } = await signUp('Grace Co');
+    await subscribe(agent);
+    const db = await prisma();
+    const id = await orgIdOf(agent);
+
+    await agent.post('/api/billing/dev/simulate').send({ action: 'payment_failed' }).expect(200);
+    await agent.post('/api/clients').send({ name: 'Still OK' }).expect(201);
+    await db.organization.update({ where: { id }, data: { pastDueSince: new Date(Date.now() - 8 * 86_400_000) } });
+    await agent.post('/api/clients').send({ name: 'Blocked' }).expect(402);
+
+    await agent.post('/api/billing/dev/simulate').send({ action: 'payment_succeeded' }).expect(200);
+    const cancelled = (await agent.post('/api/billing/dev/simulate').send({ action: 'cancel' }).expect(200)).body;
+    expect(cancelled).toMatchObject({ status: 'canceled', access: 'full', cancelAtPeriodEnd: true });
+    await agent.post('/api/clients').send({ name: 'OK until period end' }).expect(201);
+    const ended = (await agent.post('/api/billing/dev/simulate').send({ action: 'end_now' }).expect(200)).body;
+    expect(ended).toMatchObject({ status: 'expired', access: 'read-only' });
+  });
+
+  it('refuses another company’s checkout link and blocks a second subscription', async () => {
+    const a = await signUp('Checkout A');
+    const b = await signUp('Checkout B');
+    const { url } = (await a.agent.post('/api/billing/checkout').send({ interval: 'month' }).expect(200)).body;
+    const token = new URL(url).searchParams.get('dev-checkout')!;
+    await b.agent.post('/api/billing/dev/complete').send({ token }).expect(403);
+    await a.agent.post('/api/billing/dev/complete').send({ token }).expect(200);
+    await a.agent.post('/api/billing/checkout').send({ interval: 'year' }).expect(400);
+    expect((await a.agent.post('/api/billing/portal').expect(200)).body.url).toContain('dev-portal=1');
+    await b.agent.post('/api/billing/portal').expect(400);
   });
 });

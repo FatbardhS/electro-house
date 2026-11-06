@@ -137,7 +137,12 @@
         @if (page.error(); as err) {
           <div class="overlay-msg"><app-error-state [message]="'The plan page could not be opened: ' + message(err)" (retry)="page.reload()" /></div>
         }
-        @if (renderError(); as e) {
+        @if (readOnly()) {
+          <div class="banner banner-error floating" role="status">
+            Read-only: your subscription is not active, so changes are not saved. Viewing and PDF export still work.
+            <a class="btn btn-sm" routerLink="/settings" [queryParams]="{ tab: 'billing' }">Billing</a>
+          </div>
+        } @else if (renderError(); as e) {
           <div class="banner banner-error floating" role="alert">{{ e }}
             <button class="btn btn-sm" type="button" (click)="renderError.set(null)">Dismiss</button>
           </div>

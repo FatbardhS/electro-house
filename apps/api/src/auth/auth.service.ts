@@ -1,7 +1,8 @@
 import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { hash, verify } from '@node-rs/argon2';
 import { createHash, randomBytes } from 'node:crypto';
-import type { SessionDto, SignInInput, SignUpInput } from '@electro/shared';
+import { TRIAL_DAYS, accessLevel, billingSummary, type SessionDto, type SignInInput, type SignUpInput } from '@electro/shared';
+import { BILLING_SELECT, billingStateOf } from '../billing/billing-state.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { env } from '../config/env.js';
 import type { AuthContext } from './auth-context.js';
@@ -23,7 +24,9 @@ export class AuthService {
     const passwordHash = await hash(input.password);
     const { user, organization } = await this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({ data: { email: input.email, name: input.name, passwordHash } });
-      const organization = await tx.organization.create({ data: { name: input.organizationName } });
+      const organization = await tx.organization.create({
+        data: { name: input.organizationName, subscriptionStatus: 'trialing', trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 86_400_000) },
+      });
       await tx.membership.create({ data: { userId: user.id, organizationId: organization.id, role: 'OWNER' } });
       return { user, organization };
     });
@@ -34,7 +37,7 @@ export class AuthService {
       expiresAt,
       session: {
         user: { id: user.id, email: user.email, name: user.name },
-        organization: { id: organization.id, name: organization.name, role: 'OWNER' },
+        organization: { id: organization.id, name: organization.name, role: 'OWNER', billing: billingSummary(billingStateOf(organization)) },
       },
     };
   }
@@ -58,7 +61,12 @@ export class AuthService {
       expiresAt,
       session: {
         user: { id: user.id, email: user.email, name: user.name },
-        organization: { id: membership.organization.id, name: membership.organization.name, role: membership.role },
+        organization: {
+          id: membership.organization.id,
+          name: membership.organization.name,
+          role: membership.role,
+          billing: billingSummary(billingStateOf(membership.organization)),
+        },
       },
     };
   }
@@ -78,6 +86,7 @@ export class AuthService {
     }
     const membership = await this.prisma.membership.findUnique({
       where: { organizationId_userId: { organizationId: session.organizationId, userId: session.userId } },
+      include: { organization: { select: BILLING_SELECT } },
     });
     if (!membership) return null;
     return {
@@ -85,6 +94,7 @@ export class AuthService {
       userId: session.userId,
       organizationId: session.organizationId,
       role: membership.role,
+      access: accessLevel(billingStateOf(membership.organization)),
     };
   }
 
@@ -95,7 +105,12 @@ export class AuthService {
     });
     return {
       user: { id: membership.user.id, email: membership.user.email, name: membership.user.name },
-      organization: { id: membership.organization.id, name: membership.organization.name, role: membership.role },
+      organization: {
+          id: membership.organization.id,
+          name: membership.organization.name,
+          role: membership.role,
+          billing: billingSummary(billingStateOf(membership.organization)),
+        },
     };
   }
 

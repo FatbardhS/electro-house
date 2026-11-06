@@ -10,7 +10,8 @@ const config = env(); // fail fast on bad configuration
 const { AppModule } = await import('./app.module.js');
 const { configureApp } = await import('./app.setup.js');
 
-const app = await NestFactory.create<NestExpressApplication>(AppModule);
+// rawBody: payment provider webhooks are verified against the exact bytes they signed.
+const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
 configureApp(app);
 app.enableShutdownHooks();
 await app.listen(config.PORT);

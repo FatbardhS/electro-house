@@ -18,11 +18,28 @@ const envSchema = z.object({
     .default('false')
     .transform((v) => v === 'true'),
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
+  /** `paddle` for real subscriptions; `dev` simulates checkout locally (refused in production). */
+  BILLING_PROVIDER: z.enum(['dev', 'paddle']).default('dev'),
+  /** Paddle Billing: `sandbox` for testing, `production` for real payments. */
+  PADDLE_ENV: z.enum(['sandbox', 'production']).default('sandbox'),
+  PADDLE_API_KEY: z.string().min(1).optional(),
+  PADDLE_WEBHOOK_SECRET: z.string().min(1).optional(),
+  /** Paddle price ids (pri_…) of the per-user monthly and yearly prices. */
+  PADDLE_PRICE_MONTHLY: z.string().startsWith('pri_').optional(),
+  PADDLE_PRICE_YEARLY: z.string().startsWith('pri_').optional(),
 })
   .superRefine((e, ctx) => {
     if (e.STORAGE_DRIVER === 's3') {
       for (const key of ['S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'] as const) {
         if (!e[key]) ctx.addIssue({ code: 'custom', path: [key], message: 'Required when STORAGE_DRIVER=s3' });
+      }
+    }
+    if (e.BILLING_PROVIDER === 'dev' && e.NODE_ENV === 'production') {
+      ctx.addIssue({ code: 'custom', path: ['BILLING_PROVIDER'], message: 'The dev billing provider is not allowed in production' });
+    }
+    if (e.BILLING_PROVIDER === 'paddle') {
+      for (const key of ['PADDLE_API_KEY', 'PADDLE_WEBHOOK_SECRET', 'PADDLE_PRICE_MONTHLY', 'PADDLE_PRICE_YEARLY'] as const) {
+        if (!e[key]) ctx.addIssue({ code: 'custom', path: [key], message: 'Required when BILLING_PROVIDER=paddle' });
       }
     }
     if (e.STORAGE_DRIVER === 'local' && e.NODE_ENV === 'production') {

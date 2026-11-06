@@ -5,7 +5,7 @@ import { signInSchema, signUpSchema, type SessionDto, type SignInInput, type Sig
 import { ZodPipe } from '../common/zod-validation.pipe.js';
 import { env } from '../config/env.js';
 import { AuthService } from './auth.service.js';
-import { Auth, Public, SESSION_COOKIE, type AuthContext } from './auth-context.js';
+import { AllowReadOnly, Auth, Public, SESSION_COOKIE, type AuthContext } from './auth-context.js';
 
 @Controller('auth')
 export class AuthController {
@@ -37,6 +37,7 @@ export class AuthController {
   }
 
   @Post('sign-out')
+  @AllowReadOnly()
   @HttpCode(204)
   async signOut(@Auth() auth: AuthContext, @Res({ passthrough: true }) res: Response): Promise<void> {
     await this.auth.signOut(auth.sessionId);

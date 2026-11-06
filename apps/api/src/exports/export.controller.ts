@@ -1,7 +1,7 @@
 import { Body, Controller, HttpCode, Param, ParseUUIDPipe, Post, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { exportOptionsSchema, type ExportOptions } from '@electro/shared';
-import { Auth, type AuthContext } from '../auth/auth-context.js';
+import { AllowReadOnly, Auth, type AuthContext } from '../auth/auth-context.js';
 import { ZodPipe } from '../common/zod-validation.pipe.js';
 import { ExportService } from './export.service.js';
 
@@ -11,6 +11,7 @@ export class ExportController {
 
   /** Generates the project PDF and sends it as a download. */
   @Post('projects/:id/exports')
+  @AllowReadOnly()
   @HttpCode(200)
   async export(
     @Auth() auth: AuthContext,

@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { summaryBanner } from '@electro/shared';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { BrandMark } from '../../shared/ui/brand-mark';
@@ -24,6 +25,12 @@ import { BrandMark } from '../../shared/ui/brand-mark';
       }
       <button class="btn btn-sm btn-ghost" type="button" (click)="auth.signOut()">Sign out</button>
     </header>
+    @if (banner(); as b) {
+      <div class="billing-banner" [class]="'billing-banner ' + b.kind" role="status">
+        <span>{{ b.text }}</span>
+        @if (canManage()) { <a routerLink="/settings" [queryParams]="{ tab: 'billing' }">Billing</a> }
+      </div>
+    }
     <main><router-outlet /></main>
   `,
   styles: `
@@ -46,9 +53,20 @@ import { BrandMark } from '../../shared/ui/brand-mark';
     .who { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.2; font-size: 13px; }
     .who .faint { font-size: 11px; }
     main { flex: 1; }
+    .billing-banner { display: flex; gap: 12px; align-items: center; justify-content: center; flex-wrap: wrap;
+                      padding: 8px 16px; font-size: 13px; border-bottom: 1px solid var(--border); text-align: center; }
+    .billing-banner a { font-weight: 600; }
+    .billing-banner.info { background: var(--accent-soft); }
+    .billing-banner.warn { background: var(--warn-soft); }
+    .billing-banner.error { background: rgba(229, 72, 77, 0.14); }
     @media (max-width: 640px) { .who { display: none; } .topbar { gap: 12px; padding: 0 12px; } }
   `,
 })
 export class Shell {
   protected readonly auth = inject(AuthService);
+  protected readonly banner = computed(() => {
+    const billing = this.auth.session()?.organization.billing;
+    return billing ? summaryBanner(billing) : null;
+  });
+  protected readonly canManage = computed(() => this.auth.session()?.organization.role !== 'MEMBER');
 }

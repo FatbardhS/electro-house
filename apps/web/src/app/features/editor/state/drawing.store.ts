@@ -151,7 +151,11 @@ export class DrawingStore {
 
   // ── editing ──
 
+  /** True when the company's subscription is inactive: the drawing can be viewed but not changed. */
+  readonly readOnly = signal(false);
+
   execute(cmd: Command): void {
+    if (this.readOnly()) return;
     const changes = cmd.changes.filter((c) => !same(c.before, c.after));
     if (changes.length === 0) return;
     this.applyRaw(changes);

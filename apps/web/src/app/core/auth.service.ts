@@ -57,6 +57,15 @@ export class AuthService {
     }
   }
 
+  /** Re-reads the session (e.g. after a subscription change, or when the API reports read-only mode). */
+  async refresh(): Promise<void> {
+    try {
+      this.sessionState.set(await firstValueFrom(this.http.get<SessionDto>('/api/auth/me')));
+    } catch {
+      /* keep the current state; the next request will report problems */
+    }
+  }
+
   /** Called when the API reports an expired session. */
   markSignedOut(): void {
     this.sessionState.set(null);

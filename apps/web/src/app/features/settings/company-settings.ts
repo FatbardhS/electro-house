@@ -63,7 +63,7 @@ import { toApiError } from '../../core/api-error';
       @if (error(); as e) { <div class="banner banner-error" role="alert">{{ e }}</div> }
       @if (saved()) { <div class="banner banner-ok" role="status">Settings saved.</div> }
       @if (readonly()) {
-        <p class="faint small">Only the owner or an admin can change company settings.</p>
+        <p class="faint small">Read-only: only the owner or an admin can change company settings, and only while the subscription is active.</p>
       } @else {
         <div class="actions"><button class="btn btn-primary" type="submit" [disabled]="busy()">{{ busy() ? 'Saving…' : 'Save settings' }}</button></div>
       }

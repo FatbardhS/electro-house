@@ -175,6 +175,12 @@
   box-shadow: var(--shadow);
   z-index: 2;
 }
+/* Over the white plan the translucent banner colours wash out: give floating banners a solid dark base. */
+.floating.banner-error {
+  background: linear-gradient(var(--danger-soft), var(--danger-soft)), var(--bg-elev);
+  width: max-content;
+  max-width: min(640px, 90%);
+}
 .overlay-msg {
   position: absolute;
   inset: 0;

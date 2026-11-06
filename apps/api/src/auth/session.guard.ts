@@ -1,8 +1,17 @@
-import { CanActivate, ExecutionContext, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { READ_ONLY_MESSAGE } from '@electro/shared';
 import { Reflector } from '@nestjs/core';
 import { env } from '../config/env.js';
 import { AuthService } from './auth.service.js';
-import { PUBLIC_KEY, SESSION_COOKIE, type AuthedRequest } from './auth-context.js';
+import { ALLOW_READ_ONLY_KEY, PUBLIC_KEY, SESSION_COOKIE, type AuthedRequest } from './auth-context.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
@@ -34,6 +43,12 @@ export class SessionGuard implements CanActivate {
     const auth = await this.auth.resolve(cookies?.[SESSION_COOKIE]);
     if (!auth) throw new UnauthorizedException('Your session has expired. Please sign in again.');
     req.auth = auth;
+
+    // Read-only when the subscription is inactive: reading and exporting work, changes are refused.
+    if (auth.access === 'read-only' && !SAFE_METHODS.has(req.method)) {
+      const allowed = this.reflector.getAllAndOverride<boolean>(ALLOW_READ_ONLY_KEY, [ctx.getHandler(), ctx.getClass()]);
+      if (!allowed) throw new HttpException({ statusCode: 402, message: READ_ONLY_MESSAGE }, HttpStatus.PAYMENT_REQUIRED);
+    }
     return true;
   }
 }

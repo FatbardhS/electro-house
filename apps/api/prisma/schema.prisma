@@ -20,6 +20,20 @@ model Organization {
   createdAt DateTime     @default(now())
   /// Company settings: currency, VAT, markup, labour rate, allowances, title-block details. See `organizationSettingsSchema`.
   settings  Json         @default("{}")
+  // ── Subscription (see packages/shared/src/billing). Kept in sync by provider webhooks.
+  /// trialing | active | past_due | canceled | expired
+  subscriptionStatus     String    @default("trialing")
+  trialEndsAt            DateTime?
+  currentPeriodEnd       DateTime?
+  cancelAtPeriodEnd      Boolean   @default(false)
+  pastDueSince           DateTime?
+  /// month | year
+  billingInterval        String?
+  seats                  Int       @default(1)
+  /// "paddle" | "dev"
+  billingProvider        String?
+  providerCustomerId     String?
+  providerSubscriptionId String?   @unique
   members   Membership[]
   clients   Client[]
   projects  Project[]
@@ -325,4 +339,20 @@ model MaterialRule {
   material       Material     @relation(fields: [materialId], references: [id], onDelete: Restrict)
 
   @@index([organizationId, target])
+}
+
+// ── Billing ───────────────────────────────────────────────────
+
+/// Every verified webhook event, so a retried delivery is applied only once.
+model BillingEvent {
+  id             String   @id @default(uuid()) @db.Uuid
+  provider       String
+  eventId        String
+  type           String
+  organizationId String?  @db.Uuid
+  receivedAt     DateTime @default(now())
+  payload        Json
+
+  @@unique([provider, eventId])
+  @@index([organizationId])
 }
