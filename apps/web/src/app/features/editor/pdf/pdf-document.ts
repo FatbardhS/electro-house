@@ -8,8 +8,13 @@ import type { Size } from '@electro/shared';
 const ASSETS = '/pdfjs/';
 let pdfjsPromise: Promise<typeof import('pdfjs-dist')> | undefined;
 
+/**
+ * The legacy build is used on purpose: the modern build calls very new JavaScript APIs
+ * (e.g. Map.prototype.getOrInsertComputed) that current stable Chrome/Edge/Firefox/Safari do not all have,
+ * and the plan then silently never draws. The legacy build ships polyfills for them. Same API and types.
+ */
 function pdfjs() {
-  pdfjsPromise ??= import('pdfjs-dist').then((lib) => {
+  pdfjsPromise ??= (import('pdfjs-dist/legacy/build/pdf.mjs') as Promise<typeof import('pdfjs-dist')>).then((lib) => {
     lib.GlobalWorkerOptions.workerSrc = `${ASSETS}pdf.worker.min.mjs`;
     return lib;
   });

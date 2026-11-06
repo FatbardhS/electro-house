@@ -138,17 +138,17 @@ export class PdfLayer implements OnDestroy {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(rect.x * dpr, rect.y * dpr, rect.width * dpr, rect.height * dpr);
 
-    const viewport = page.getViewport({ scale: view.zoom * dpr, rotation: (page.rotate + view.rotation) % 360 });
-    this.task = page.render({
-      canvas: off,
-      canvasContext: ctx,
-      viewport,
-      // Shift the page so only the visible region lands on this viewport-sized canvas.
-      transform: [1, 0, 0, 1, view.pan.x * dpr, view.pan.y * dpr],
-      background: 'rgba(0,0,0,0)',
-    });
-
     try {
+      // Inside the try: PDF.js can also fail synchronously here, which must show an error, not a blank plan.
+      const viewport = page.getViewport({ scale: view.zoom * dpr, rotation: (page.rotate + view.rotation) % 360 });
+      this.task = page.render({
+        canvas: off,
+        canvasContext: ctx,
+        viewport,
+        // Shift the page so only the visible region lands on this viewport-sized canvas.
+        transform: [1, 0, 0, 1, view.pan.x * dpr, view.pan.y * dpr],
+        background: 'rgba(0,0,0,0)',
+      });
       await this.task.promise;
     } catch (err) {
       if ((err as { name?: string }).name === 'RenderingCancelledException' || this.destroyed) return;

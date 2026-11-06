@@ -10,7 +10,8 @@ const pdfjsRoot = dirname(require.resolve('pdfjs-dist/package.json'));
 const target = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'pdfjs');
 
 mkdirSync(target, { recursive: true });
-cpSync(join(pdfjsRoot, 'build', 'pdf.worker.min.mjs'), join(target, 'pdf.worker.min.mjs'));
+// Legacy build: includes polyfills for very new JavaScript APIs that many browsers do not have yet.
+cpSync(join(pdfjsRoot, 'legacy', 'build', 'pdf.worker.min.mjs'), join(target, 'pdf.worker.min.mjs'));
 for (const dir of ['cmaps', 'standard_fonts', 'wasm', 'iccs']) {
   const src = join(pdfjsRoot, dir);
   if (existsSync(src)) cpSync(src, join(target, dir), { recursive: true });
