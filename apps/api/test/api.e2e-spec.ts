@@ -533,6 +533,31 @@ describe('price list, material rules and company settings', () => {
     const first = (await agent.post('/api/materials/examples').expect(200)).body.added;
     expect(first).toBeGreaterThan(0);
     expect((await agent.post('/api/materials/examples').expect(200)).body.added).toBe(0);
+    // created in the account's language (Albanian by default)
+    const names = ((await agent.get('/api/materials').expect(200)).body as { name: string }[]).map((m) => m.name);
+    expect(names).toContain('Prizë e dyfishtë (shembull)');
+  });
+
+  it('writes the PDF in the language of the user who exports', async () => {
+    const { agent } = await signUp('PDF Gjuha');
+    const client = (await agent.post('/api/clients').send({ name: 'K' })).body;
+    const project = (await agent.post('/api/projects').send({ clientId: client.id, name: 'P' })).body;
+    const opts = { sections: ['circuits'], floorIds: [], hiddenLayers: [], paper: 'A3', orientation: 'auto', bomGrouping: 'project' };
+    const pdfText = async () => {
+      const res = await agent.post(`/api/projects/${project.id}/exports`).send(opts).buffer(true).parse((r, cb) => {
+        const chunks: Buffer[] = [];
+        r.on('data', (c: Buffer) => chunks.push(c));
+        r.on('end', () => cb(null, Buffer.concat(chunks)));
+      });
+      expect(res.status).toBe(200);
+      const { default: pdfjs } = await import('pdfjs-dist/legacy/build/pdf.mjs').then((m) => ({ default: m }));
+      const doc = await pdfjs.getDocument({ data: new Uint8Array(res.body as Buffer) }).promise;
+      const page = await doc.getPage(1);
+      return (await page.getTextContent()).items.map((i) => ('str' in i ? i.str : '')).join(' ');
+    };
+    expect(await pdfText()).toContain('Lista e qarqeve');
+    await agent.post('/api/auth/language').send({ language: 'en' }).expect(204);
+    expect(await pdfText()).toContain('Circuit list');
   });
 
   it('stores project cost settings and floor heights without touching floor revisions', async () => {
@@ -569,6 +594,7 @@ describe('PDF export', () => {
 
   it('exports plans over the embedded vector plan page, plus schedules, BOM and costs', async () => {
     const { agent } = await signUp('Export Ëlectric');
+    await agent.post('/api/auth/language').send({ language: 'en' }).expect(204); // texts below are checked in English
     const client = (await agent.post('/api/clients').send({ name: 'Familja Krasniqi' })).body;
     const project = (await agent.post('/api/projects').send({ clientId: client.id, name: 'Shtëpia 2026', propertyAddress: 'Rr. Agim Ramadani 5' })).body;
     const floor = (await agent.post(`/api/projects/${project.id}/floors`).send({ name: 'Kati përdhes' })).body as FloorDto;
@@ -814,6 +840,7 @@ describe('validation checks and DXF export', () => {
 
   it('adds a Checks section to the PDF when asked', async () => {
     const { agent, project } = await setup('Checks PDF Co');
+    await agent.post('/api/auth/language').send({ language: 'en' }).expect(204);
     const res = await binary(agent.post(`/api/projects/${project.id}/exports`).send({ ...DEFAULT_EXPORT_OPTIONS, sections: ['checks'] })).expect(200);
     const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
     const doc = await pdfjs.getDocument({ data: new Uint8Array(res.body as Buffer), verbosity: 0 }).promise;

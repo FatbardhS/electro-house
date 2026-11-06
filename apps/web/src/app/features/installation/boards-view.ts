@@ -62,7 +62,7 @@ const NOMINAL_PHASE_VOLTAGE = 230;
                     <td class="num mono">{{ l.loadW | num: 0 }}</td>
                     <td class="num mono">{{ l.designCurrentA === null ? '—' : (l.designCurrentA | num: 1) }}</td>
                     <td class="num mono">{{ l.cableM | num: 1 }}</td>
-                    <td class="notes">{{ l.warnings.join(' ') }}</td>
+                    <td class="notes">@for (w of l.warnings; track $index) { {{ w | tx }} }</td>
                   </tr>
                 }
               </tbody>

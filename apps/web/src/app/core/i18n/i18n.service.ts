@@ -1,5 +1,6 @@
 import { DOCUMENT, Injectable, effect, inject, signal } from '@angular/core';
-import { SQ, SQ_EXTRA, type TKey } from './sq';
+import { translateText } from '@electro/shared/i18n';
+import { SQ, type TKey } from './sq';
 
 export type Lang = 'sq' | 'en';
 export const LANGS: readonly Lang[] = ['sq', 'en'];
@@ -68,7 +69,7 @@ export class I18n {
    */
   tx(text: string, params?: TParams): string {
     let out = text;
-    if (this.lang() === 'sq') out = (SQ as Record<string, string>)[text] ?? SQ_EXTRA[text] ?? text;
+    if (this.lang() === 'sq') out = (SQ as Record<string, string>)[text] ?? translateText(text, 'sq');
     return params ? fill(out, params) : out;
   }
 

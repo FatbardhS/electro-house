@@ -3,7 +3,6 @@ import { SQ_PROJECTS } from './sq-projects';
 import { SQ_EDITOR } from './sq-editor';
 import { SQ_INSTALLATION } from './sq-installation';
 import { SQ_SETTINGS } from './sq-settings';
-import { SQ_EXTRA_MESSAGES } from './sq-messages';
 
 /**
  * Albanian dictionary, keyed by the English text. Split by area so each file stays readable.
@@ -20,5 +19,3 @@ export const SQ = {
 
 export type TKey = keyof typeof SQ;
 
-/** Texts that arrive at runtime (server and validation messages); translated when they match exactly. */
-export const SQ_EXTRA: Record<string, string> = SQ_EXTRA_MESSAGES;

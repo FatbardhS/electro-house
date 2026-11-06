@@ -55,7 +55,7 @@ type OverrideKey = 'markupPct' | 'vatPct' | 'hourlyRate' | 'wastePct' | 'endRese
           ⚠ {{ '{n} item type(s) have no material assigned and are not priced:' | t: { n: r.project.unmapped.length } }}
           @for (u of r.project.unmapped; track u.target; let last = $last) {
             <a routerLink="/settings" [queryParams]="{ tab: 'rules', target: u.target }">{{ u.label | tx }}</a>
-            ({{ u.quantity | num: (u.unit === 'm' ? 1 : 0) }} {{ u.unit }}){{ last ? '.' : ',' }}
+            ({{ u.quantity | num: (u.unit === 'm' ? 1 : 0) }} {{ u.unit | tx }}){{ last ? '.' : ',' }}
           }
         </span></div>
       }
@@ -74,7 +74,7 @@ type OverrideKey = 'markupPct' | 'vatPct' | 'hourlyRate' | 'wastePct' | 'endRese
 
           @for (g of r.groups; track g.id) {
             <section class="card group">
-              @if (grouping() !== 'project') { <h3>{{ g.name }}</h3> }
+              @if (grouping() !== 'project') { <h3>{{ g.name | tx }}</h3> }
               @if (g.bom.cables.length) {
                 <div class="scroll">
                   <table class="table dense">
@@ -116,7 +116,7 @@ type OverrideKey = 'markupPct' | 'vatPct' | 'hourlyRate' | 'wastePct' | 'endRese
                             <td class="num mono">{{ l.packs ?? '—' }}</td>
                             <td class="num mono">{{ l.orderQuantity | num: 2: 0 }}</td>
                           }
-                          <td class="faint">{{ l.material.unit }}</td>
+                          <td class="faint">{{ l.material.unit | tx }}</td>
                           <td class="num mono">{{ l.material.unitPrice | num: 4: 2 }}</td>
                           <td class="num mono">{{ l.total | num: 2 }}</td>
                         </tr>

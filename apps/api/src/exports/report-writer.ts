@@ -1,5 +1,6 @@
 import { rgb as pdfRgb, type PDFDocument, type PDFFont, type PDFPage } from 'pdf-lib';
 import { MM, safeText, type Fonts } from './pdf-graphics.js';
+import { tr } from './export-lang.js';
 
 const A4 = { width: 210 * MM, height: 297 * MM };
 const MARGIN = 15 * MM;
@@ -77,7 +78,7 @@ export class ReportWriter {
 
   /** Starts a new section on a new page. */
   startSection(title: string, landscape = false): void {
-    this.section = title;
+    this.section = tr(title);
     this.landscape = landscape;
     this.addPage();
   }
@@ -86,7 +87,7 @@ export class ReportWriter {
     const size: [number, number] = this.landscape ? [A4.height, A4.width] : [A4.width, A4.height];
     this.page = this.doc.addPage(size);
     const top = this.page.getHeight() - MARGIN;
-    const title = continued ? `${this.section} (continued)` : this.section;
+    const title = continued ? `${this.section} (${tr('continued')})` : this.section;
     this.page.drawText(safeText(this.fonts.bold, title), { x: MARGIN, y: top - 12, size: 14, font: this.fonts.bold, color: TEXT });
     const right = safeText(this.fonts.regular, this.headerRight);
     const rw = this.fonts.regular.widthOfTextAtSize(right, 8.5);
@@ -105,7 +106,7 @@ export class ReportWriter {
   heading(text: string, size = 11.5): void {
     this.ensure(size * 3);
     this.y -= 4;
-    this.page.drawText(safeText(this.fonts.bold, text), { x: MARGIN, y: this.y - size, size, font: this.fonts.bold, color: TEXT });
+    this.page.drawText(safeText(this.fonts.bold, tr(text)), { x: MARGIN, y: this.y - size, size, font: this.fonts.bold, color: TEXT });
     this.y -= size + 8;
   }
 
@@ -113,7 +114,7 @@ export class ReportWriter {
     const size = opts.size ?? 9;
     const font = opts.bold ? this.fonts.bold : this.fonts.regular;
     const color = opts.warn ? WARN : opts.muted ? MUTED : TEXT;
-    for (const line of wrapText(font, text, size, this.width)) {
+    for (const line of wrapText(font, tr(text), size, this.width)) {
       this.ensure(size * 1.4);
       this.page.drawText(line, { x: MARGIN, y: this.y - size, size, font, color });
       this.y -= size * 1.4;
@@ -130,9 +131,9 @@ export class ReportWriter {
     const size = opts.size ?? 10;
     const lw = opts.labelWidth ?? 45 * MM;
     for (const [k, v] of rows) {
-      const lines = wrapText(this.fonts.regular, v || '—', size, this.width - lw);
+      const lines = wrapText(this.fonts.regular, v ? tr(v) : '—', size, this.width - lw);
       this.ensure(lines.length * size * 1.45);
-      this.page.drawText(safeText(this.fonts.regular, k), { x: MARGIN, y: this.y - size, size, font: this.fonts.regular, color: MUTED });
+      this.page.drawText(safeText(this.fonts.regular, tr(k)), { x: MARGIN, y: this.y - size, size, font: this.fonts.regular, color: MUTED });
       lines.forEach((l, i) => this.page.drawText(l, { x: MARGIN + lw, y: this.y - size - i * size * 1.3, size, font: this.fonts.regular, color: TEXT }));
       this.y -= lines.length * size * 1.3 + size * 0.5;
     }
@@ -146,7 +147,7 @@ export class ReportWriter {
     const total = columns.reduce((s, c) => s + c.width, 0);
     const widths = columns.map((c) => (c.width / total) * this.width);
     const drawRow = (cells: string[], font: PDFFont, rowIndex: number | null, header: boolean) => {
-      const wrapped = cells.map((t, i) => wrapText(font, t ?? '', size, widths[i]! - 2 * pad));
+      const wrapped = cells.map((t, i) => wrapText(font, t ? tr(t) : '', size, widths[i]! - 2 * pad));
       const h = Math.max(header ? 0 : (opts.minRowHeight ?? 0), Math.max(...wrapped.map((l) => l.length)) * lineH + 2 * pad);
       if (!header && this.ensure(h)) drawHeader();
       const top = this.y;
@@ -176,7 +177,7 @@ export class ReportWriter {
   finish(footer: string): void {
     const pages = this.doc.getPages();
     pages.forEach((p, i) => {
-      const label = `Page ${i + 1} of ${pages.length}`;
+      const label = tr(`Page ${i + 1} of ${pages.length}`);
       const w = this.fonts.regular.widthOfTextAtSize(label, 7.5);
       p.drawText(label, { x: p.getWidth() - MARGIN - w, y: 8 * MM, size: 7.5, font: this.fonts.regular, color: MUTED });
       p.drawText(safeText(this.fonts.regular, footer), { x: MARGIN, y: 8 * MM, size: 7.5, font: this.fonts.regular, color: MUTED });

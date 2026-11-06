@@ -47,14 +47,14 @@ const SEVERITY_PLURAL: Record<Severity, TKey> = { error: 'Errors', warning: 'War
     }
     @for (g of groups(); track g.key) {
       <section class="card group">
-        <h3>{{ g.name }} <span class="faint">· {{ g.items.length }}</span></h3>
+        <h3>{{ g.name | tx }} <span class="faint">· {{ g.items.length }}</span></h3>
         <ul>
           @for (i of g.items; track i.issue.id) {
             <li [class.ignored]="i.ignored">
               <span class="sev" [class]="'sev ' + i.issue.severity">{{ label[i.issue.severity] | t }}</span>
               <div class="text">
                 <div class="title">{{ checkTitle[i.issue.code] | tx }} <span class="faint mono small">{{ i.issue.code }}</span></div>
-                <div class="msg">{{ i.issue.message }}</div>
+                <div class="msg">{{ i.issue.message | tx }}</div>
               </div>
               <div class="acts">
                 @if (i.issue.floorId && (i.issue.componentIds.length || i.issue.wireIds.length)) {

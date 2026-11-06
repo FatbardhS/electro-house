@@ -77,7 +77,7 @@ import { t, tx } from '../../core/i18n/i18n.service';
                 <td><button class="btn btn-sm btn-ghost btn-danger" type="button" (click)="remove(c)" [attr.aria-label]="'Delete circuit {n}' | t: { n: c.number }">✕</button></td>
               </tr>
               @if (l.warnings.length) {
-                <tr class="warnrow"><td colspan="19">⚠ {{ l.warnings.join(' ') }}</td></tr>
+                <tr class="warnrow"><td colspan="19">⚠ @for (w of l.warnings; track $index) { {{ w | tx }} }</td></tr>
               }
             }
           </tbody>

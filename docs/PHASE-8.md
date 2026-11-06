@@ -29,7 +29,20 @@
 2. `node scripts/seed-showroom-prices.mjs <email> <password>` – sample materials and rules (fictional prices).
 3. `node scripts/capture-showroom.mjs <email> <password> <projectId> <floorId>` – headless Chrome screenshots.
 
-## 8B (next)
-- Check messages, warnings and banners generated in `packages/shared` (they still arrive in English).
-- Server error messages in the user’s language.
-- PDF and DXF exports in the language of whoever exports; example price list created in the current language.
+## 8B (done)
+
+- **One translator for runtime texts** in `packages/shared/src/i18n` (`translateText`, dictionary `sq-runtime.ts`),
+  used by the web app and the API. Exact texts first, then templates such as
+  `Circuit {c}: estimated {a} A is above its {b} A breaker.` – the values inside are translated too, and decimals
+  become Albanian (`2.5` → `2,5`). So check messages, circuit warnings, billing banners, validation and server
+  messages appear in Albanian without changing the code that writes them.
+- **PDF export in the language of the user who exports** (`apps/api/src/exports/export-lang.ts`): every heading,
+  table and paragraph goes through the translator; numbers and money use 1.234,50.
+- **DXF stays technical English** (CAD layer and linetype names; R12 DXF does not handle ë/ç reliably).
+- **Example price list** is created in the user's language; floor-name presets (Përdhesa, Kati i parë…) follow the
+  interface language; units are shown translated (copë, orë…).
+- The web app imports only `@electro/shared/i18n` at start-up, so the landing page stays small.
+- Tests: translator unit tests; e2e checks for the Albanian example price list and the PDF language.
+
+Not translated on purpose: anything the user typed (client, project, floor, material names) and price lists saved
+before this change.

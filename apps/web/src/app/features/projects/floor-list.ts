@@ -132,7 +132,8 @@ export class FloorList {
 
   protected readonly availablePresets = computed(() => {
     const used = new Set(this.floors().map((f) => f.name.toLowerCase()));
-    return FLOOR_PRESETS.filter((p) => !used.has(p.toLowerCase())) as string[];
+    // Presets in the interface language: a new floor gets e.g. "Përdhesa" in Albanian.
+    return FLOOR_PRESETS.map((p) => this.i18n.tx(p)).filter((p) => !used.has(p.toLowerCase()));
   });
 
   protected readonly selectedPreset = computed(() => {

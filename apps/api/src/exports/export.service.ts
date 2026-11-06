@@ -16,7 +16,6 @@ import {
   componentType,
   costSummary,
   effectiveCostSettings,
-  formatMoney,
   groupTakeoff,
   normalizeRotation,
   readOrganizationSettings,
@@ -35,11 +34,8 @@ import { drawPlanSheet, type EmbeddedPlan, type TitleBlock } from './plan-sheet.
 import { ReportWriter } from './report-writer.js';
 import { dxfFileName, floorToDxf } from './dxf.js';
 import { zip } from './zip.js';
+import { money, n0, n1, n2, q, tr } from './export-lang.js';
 
-const n0 = (v: number) => v.toLocaleString('en-US', { maximumFractionDigits: 0 });
-const n1 = (v: number) => v.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-const n2 = (v: number) => v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const q = (v: number) => v.toLocaleString('en-US', { maximumFractionDigits: 2 });
 
 /** Builds the project PDF: vector floor plans over the original plan pages, schedules, BOM and costs. */
 @Injectable()
@@ -52,6 +48,12 @@ export class ExportService {
     private readonly installation: InstallationService,
     private readonly pricing: PricingService,
   ) {}
+
+  /** Interface language of a user (Albanian unless they chose English). */
+  async userLanguage(userId: string): Promise<'sq' | 'en'> {
+    const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { language: true } });
+    return u?.language === 'en' ? 'en' : 'sq';
+  }
 
   async exportProject(organizationId: string, projectId: string, opts: ExportOptions): Promise<{ bytes: Uint8Array; fileName: string }> {
     const project = await this.prisma.project.findFirst({
@@ -76,7 +78,7 @@ export class ExportService {
     const floors = floorOrder.map((id) => inst.floors.find((f) => f.floorId === id)).filter((f) => !!f);
 
     const doc = await PDFDocument.create();
-    doc.setTitle(`${project.name} – electrical installation`);
+    doc.setTitle(tr(`${project.name} – electrical installation`));
     doc.setAuthor(project.organization.name);
     doc.setCreator('Electro House');
     doc.setProducer('Electro House');
@@ -190,7 +192,7 @@ export class ExportService {
       }
       if (projectBom.unmapped.length) {
         w.heading('Not priced (no material rule)', 10);
-        w.paragraph(projectBom.unmapped.map((u) => `${u.label}: ${q(u.quantity)} ${u.unit}`).join(' · '), { warn: true, size: 8.5 });
+        w.paragraph(projectBom.unmapped.map((u) => `${tr(u.label)}: ${q(u.quantity)} ${tr(u.unit)}`).join(' · '), { warn: true, size: 8.5 });
       }
       if (projectBom.unknownRuns) {
         w.paragraph(`${projectBom.unknownRuns} wire(s) are on floors without a scale calibration; their length is not included.`, { warn: true, size: 8.5 });
@@ -201,13 +203,13 @@ export class ExportService {
       const s = costSummary(projectBom, eff, inst.costSettings);
       w.startSection(EXPORT_SECTION_NAMES.costs);
       const rows: string[][] = [
-        ['Materials', formatMoney(s.materialsNet, s.currency)],
-        [`Markup on materials (${s.markupPct} %)`, formatMoney(s.markup, s.currency)],
-        [`Labour (${q(s.ruleHours + s.extraHours)} h × ${n2(s.hourlyRate)})`, formatMoney(s.labour, s.currency)],
-        ...s.extraLines.map((l) => [l.text, formatMoney(l.amount, s.currency)]),
-        ['Total net', formatMoney(s.net, s.currency)],
-        [`VAT (${s.vatPct} %)`, formatMoney(s.vat, s.currency)],
-        ['Total', formatMoney(s.gross, s.currency)],
+        ['Materials', money(s.materialsNet, s.currency)],
+        [`Markup on materials (${s.markupPct} %)`, money(s.markup, s.currency)],
+        [`Labour (${q(s.ruleHours + s.extraHours)} h × ${n2(s.hourlyRate)})`, money(s.labour, s.currency)],
+        ...s.extraLines.map((l) => [l.text, money(l.amount, s.currency)]),
+        ['Total net', money(s.net, s.currency)],
+        [`VAT (${s.vatPct} %)`, money(s.vat, s.currency)],
+        ['Total', money(s.gross, s.currency)],
       ];
       w.table([{ label: 'Item', width: 70 }, { label: 'Amount', width: 30, align: 'right' }], rows, {
         size: 10,
@@ -272,9 +274,9 @@ export class ExportService {
     ]);
     if (description) w.paragraph(description, { muted: true });
     w.heading('Contents', 10.5);
-    w.paragraph(opts.sections.filter((s) => s !== 'cover').map((s) => EXPORT_SECTION_NAMES[s]).join(' · '));
+    w.paragraph(opts.sections.filter((s) => s !== 'cover').map((s) => tr(EXPORT_SECTION_NAMES[s])).join(' · '));
     if (opts.hiddenLayers.length) {
-      w.paragraph(`Layers not shown on the plans: ${opts.hiddenLayers.map((l) => LAYER_NAMES[l]).join(', ')}.`, { muted: true, size: 8.5 });
+      w.paragraph(tr('Layers not shown on the plans: {l}.').replace('{l}', opts.hiddenLayers.map((l) => tr(LAYER_NAMES[l])).join(', ')), { muted: true, size: 8.5 });
     }
     w.space(6);
     w.paragraph(

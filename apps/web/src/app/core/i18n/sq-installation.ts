@@ -193,4 +193,6 @@ export const SQ_INSTALLATION = {
   "Nothing matches the filter": "Asgjë nuk përputhet me filtrin",
   "The checks found nothing to fix in this project.": "Kontrollet nuk gjetën asgjë për t’u rregulluar në këtë projekt.",
   "Turn on more severities above to see them.": "Aktivizoni më shumë nivele lart për t’i parë.",
+  "{n} open issue(s) on this floor": "{n} problem(e) të hapura në këtë kat",
+  "No problems on this floor": "Nuk ka probleme në këtë kat",
 } as const;

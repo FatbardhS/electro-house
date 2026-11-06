@@ -25,7 +25,7 @@ import { t, tx } from '../../../core/i18n/i18n.service';
       @let t = type(c);
       <div class="head">
         <svg viewBox="-7 -7 14 14" [style.color]="colors[c.layerKey]" aria-hidden="true"><use [attr.href]="'#' + id(c.typeKey)" /></svg>
-        <div><div class="tname">{{ t?.name ?? c.typeKey }}</div><div class="faint small mono">{{ c.id.slice(0, 8) }}</div></div>
+        <div><div class="tname">{{ (t?.name ?? c.typeKey) | tx }}</div><div class="faint small mono">{{ c.id.slice(0, 8) }}</div></div>
       </div>
       <label class="f"><span>{{ 'Label' | t }}</span>
         <input class="input" [value]="c.label ?? ''" maxlength="40" (change)="commit({ label: val($event) || null }, 'Rename')" /></label>
@@ -46,7 +46,7 @@ import { t, tx } from '../../../core/i18n/i18n.service';
                  (change)="commitHeight($event)" /></label>
       </div>
       @for (f of t?.fields ?? []; track f.key) {
-        <label class="f" [class.check]="f.kind === 'boolean'"><span>{{ f.label }}{{ unit(f) }}</span>
+        <label class="f" [class.check]="f.kind === 'boolean'"><span>{{ f.label | tx }}{{ unit(f) }}</span>
           @switch (f.kind) {
             @case ('number') {
               <input class="input mono" type="number" [attr.min]="$any(f).min" [attr.max]="$any(f).max" [value]="c.properties[f.key] ?? ''"
@@ -55,7 +55,7 @@ import { t, tx } from '../../../core/i18n/i18n.service';
             @case ('select') {
               <select class="input" (change)="commitProp(f, $event)">
                 <option value="" [selected]="c.properties[f.key] === undefined">—</option>
-                @for (o of $any(f).options; track o) { <option [value]="o" [selected]="c.properties[f.key] === o">{{ o }}</option> }
+                @for (o of $any(f).options; track o) { <option [value]="o" [selected]="c.properties[f.key] === o">{{ o | tx }}</option> }
               </select>
             }
             @case ('boolean') {

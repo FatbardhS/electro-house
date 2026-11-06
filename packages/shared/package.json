@@ -10,9 +10,15 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./i18n": {
+      "types": "./dist/i18n/translate.d.ts",
+      "default": "./dist/i18n/translate.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "watch": "tsc -p tsconfig.build.json --watch",
@@ -24,5 +30,6 @@
   "devDependencies": {
     "typescript": "~6.0.2",
     "vitest": "^4.1.2"
-  }
+  },
+  "sideEffects": false
 }

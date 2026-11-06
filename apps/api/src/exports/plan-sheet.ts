@@ -39,6 +39,7 @@ import {
   type Vec2,
 } from '@electro/shared';
 import { IDENTITY, MM, compose, cm, polylineOps, rgb, safeText, symbolOps, textOpsYDown, type Fonts, type Matrix6 } from './pdf-graphics.js';
+import { tr } from './export-lang.js';
 
 /** The plan page embedded as a vector form XObject, with the facts needed to place it. */
 export interface EmbeddedPlan {
@@ -126,7 +127,7 @@ function contentBounds(floor: FloorInstallationDto): { min: Vec2; max: Vec2 } | 
 }
 
 function scaleText(denominator: number | null): string {
-  return denominator === null ? 'Not to scale' : `1:${denominator}`;
+  return denominator === null ? tr('Not to scale') : `1:${denominator}`;
 }
 
 /** Draws one floor plan sheet: plan page, wires, symbols, labels, frame, title block and scale bar. */
@@ -255,7 +256,7 @@ export function drawPlanSheet(doc: PDFDocument, fonts: Fonts, input: SheetInput)
   // 6. Frame, problem note, title block, scale bar.
   page.drawRectangle({ x: area.x, y: area.y, width: area.w, height: area.h, borderColor: DARK, borderWidth: 0.6 });
   if (input.planProblem) {
-    page.drawText(safeText(fonts.regular, input.planProblem), { x: area.x + 4 * MM, y: area.y + area.h - 7 * MM, size: 8, font: fonts.regular, color: pdfRgb(0.62, 0.35, 0.02) });
+    page.drawText(safeText(fonts.regular, tr(input.planProblem)), { x: area.x + 4 * MM, y: area.y + area.h - 7 * MM, size: 8, font: fonts.regular, color: pdfRgb(0.62, 0.35, 0.02) });
   }
   drawTitleBlock(page, fonts, input, { x: MARGIN, y: BOTTOM, w: sheetW - 2 * MARGIN, h: TITLE_H }, denominator, mpu ? mpu / k : null);
   return page;
@@ -276,11 +277,11 @@ function drawTitleBlock(
   let x = box.x;
   const cellTexts: { label: string; lines: string[]; big?: string }[] = [
     { label: '', lines: t.companyLines, big: t.company },
-    { label: 'Project', lines: [t.client, t.address].filter(Boolean), big: t.project },
-    { label: 'Drawing', lines: ['Electrical installation plan'], big: input.floor.name },
+    { label: tr('Project'), lines: [t.client, t.address].filter(Boolean), big: t.project },
+    { label: tr('Drawing'), lines: [tr('Electrical installation plan')], big: input.floor.name },
     {
-      label: 'Scale',
-      lines: [`${input.paper === 'plan' ? 'Original plan size' : input.paper} · ${t.date}`, `Sheet ${input.sheetNumber} of ${input.sheetCount}`],
+      label: tr('Scale'),
+      lines: [`${input.paper === 'plan' ? tr('Original plan size') : input.paper} · ${t.date}`, tr(`Sheet ${input.sheetNumber} of ${input.sheetCount}`)],
       big: scaleText(denominator),
     },
   ];

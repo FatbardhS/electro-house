@@ -66,13 +66,13 @@ import { I18N_PIPES } from '../../core/i18n/t.pipe';
             <thead><tr><th>{{ 'Type' | t }}</th><th>{{ 'Category' | t }}</th><th class="num">{{ 'Count' | t }}</th></tr></thead>
             <tbody>
               @for (c of t.componentsByType; track c.typeKey) {
-                <tr><td>{{ c.name }}</td><td class="faint">{{ categoryNames[c.category] }}</td><td class="num mono">{{ c.count }}</td></tr>
+                <tr><td>{{ c.name | tx }}</td><td class="faint">{{ categoryNames[c.category] | tx }}</td><td class="num mono">{{ c.count }}</td></tr>
               }
             </tbody>
             <tfoot>
               @for (cat of categories; track cat) {
                 @if (t.componentsByCategory[cat]) {
-                  <tr class="sub"><td colspan="2">{{ categoryNames[cat] }}</td><td class="num mono">{{ t.componentsByCategory[cat] }}</td></tr>
+                  <tr class="sub"><td colspan="2">{{ categoryNames[cat] | tx }}</td><td class="num mono">{{ t.componentsByCategory[cat] }}</td></tr>
                 }
               }
             </tfoot>

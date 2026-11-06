@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   EXAMPLE_MATERIALS,
+  translateText,
   materialsFromCsv,
   readOrganizationSettings,
   type MaterialDto,
@@ -102,11 +103,18 @@ export class PricingService {
     await this.prisma.material.delete({ where: { id } });
   }
 
-  /** Adds the fictional example materials (skips codes that already exist). */
+  /** Adds the fictional example materials in the user's language (skips codes that already exist). */
   async addExamples(auth: AuthContext): Promise<number> {
     this.assertManager(auth);
+    const user = await this.prisma.user.findUnique({ where: { id: auth.userId }, select: { language: true } });
+    const lang = user?.language === 'en' ? 'en' : 'sq';
     const res = await this.prisma.material.createMany({
-      data: EXAMPLE_MATERIALS.map((m) => ({ organizationId: auth.organizationId, ...m })),
+      data: EXAMPLE_MATERIALS.map((m) => ({
+        organizationId: auth.organizationId,
+        ...m,
+        name: translateText(m.name, lang),
+        category: m.category ? translateText(m.category, lang) : null,
+      })),
       skipDuplicates: true,
     });
     return res.count;

@@ -183,4 +183,5 @@ export const SQ_SETTINGS = {
   'Quantity per component': 'Sasia për element',
   'Labour min per component': 'Punë min për element',
   "Role of {name}": "Roli i {name}",
+  archived: "arkivuar",
 } as const;

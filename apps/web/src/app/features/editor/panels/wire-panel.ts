@@ -59,7 +59,7 @@ import { t } from '../../../core/i18n/i18n.service';
       <label class="f"><span>{{ 'Installation method' | t }}</span>
         <select class="input" (change)="setCable({ installMethod: $any(val($event)) || undefined })">
           <option value="">—</option>
-          @for (m of methods; track m) { <option [value]="m" [selected]="w.cable.installMethod === m">{{ m }}</option> }
+          @for (m of methods; track m) { <option [value]="m" [selected]="w.cable.installMethod === m">{{ m | tx }}</option> }
         </select></label>
       <div class="f"><span>{{ 'Colour and line' | t }}</span>
         <div class="swatches">

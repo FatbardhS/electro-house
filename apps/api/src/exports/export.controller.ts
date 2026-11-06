@@ -5,6 +5,7 @@ import { exportOptionsSchema, type ExportOptions } from '@electro/shared';
 import { AllowReadOnly, Auth, type AuthContext } from '../auth/auth-context.js';
 import { ZodPipe } from '../common/zod-validation.pipe.js';
 import { ExportService } from './export.service.js';
+import { withExportLanguage } from './export-lang.js';
 
 const dxfQuery = z.object({ floorId: z.uuid().optional() });
 
@@ -38,7 +39,9 @@ export class ExportController {
     @Body(new ZodPipe(exportOptionsSchema)) body: ExportOptions,
     @Res() res: Response,
   ): Promise<void> {
-    const { bytes, fileName } = await this.exports.exportProject(auth.organizationId, id, body);
+    // The PDF is written in the language of the user who exports it.
+    const lang = await this.exports.userLanguage(auth.userId);
+    const { bytes, fileName } = await withExportLanguage(lang, () => this.exports.exportProject(auth.organizationId, id, body));
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.setHeader('Content-Length', String(bytes.length));

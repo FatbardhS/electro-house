@@ -56,8 +56,8 @@ const EMPTY: Draft = { kind: 'component', typeKey: '', cableType: 'NYM-J', condu
               <select class="input" (change)="patch({ typeKey: val($event) })">
                 <option value="" [selected]="!draft().typeKey">— {{ 'choose' | t }} —</option>
                 @for (g of typeGroups; track g.name) {
-                  <optgroup [label]="g.name">
-                    @for (t of g.types; track t.key) { <option [value]="t.key" [selected]="t.key === draft().typeKey">{{ t.name }}</option> }
+                  <optgroup [label]="g.name | tx">
+                    @for (t of g.types; track t.key) { <option [value]="t.key" [selected]="t.key === draft().typeKey">{{ t.name | tx }}</option> }
                   </optgroup>
                 }
               </select></label>
@@ -81,7 +81,7 @@ const EMPTY: Draft = { kind: 'component', typeKey: '', cableType: 'NYM-J', condu
           <label class="f wide"><span>{{ 'Material' | t }}</span>
             <select class="input" (change)="patch({ materialId: val($event) })">
               <option value="" [selected]="!draft().materialId">— {{ 'choose from the price list' | t }} —</option>
-              @for (m of activeMaterials(); track m.id) { <option [value]="m.id" [selected]="m.id === draft().materialId">{{ m.name }}{{ m.code ? ' (' + m.code + ')' : '' }} · {{ m.unit }}</option> }
+              @for (m of activeMaterials(); track m.id) { <option [value]="m.id" [selected]="m.id === draft().materialId">{{ m.name }}{{ m.code ? ' (' + m.code + ')' : '' }} · {{ m.unit | tx }}</option> }
             </select></label>
           <label class="f"><span>{{ (draft().kind === 'cable' ? 'Quantity per metre' : 'Quantity per component') | t }}</span>
             <input class="input mono" type="number" min="0" step="0.01" [value]="draft().quantity" (input)="patch({ quantity: val($event) })" /></label>
@@ -110,11 +110,11 @@ const EMPTY: Draft = { kind: 'component', typeKey: '', cableType: 'NYM-J', condu
                   <td>
                     <select class="cell" (change)="save(r, { materialId: val($event) })" [disabled]="readonly()">
                       @for (m of materials(); track m.id) {
-                        @if (!m.archived || m.id === r.materialId) { <option [value]="m.id" [selected]="m.id === r.materialId">{{ m.name }}{{ m.archived ? ' (archived)' : '' }}</option> }
+                        @if (!m.archived || m.id === r.materialId) { <option [value]="m.id" [selected]="m.id === r.materialId">{{ m.name }}{{ m.archived ? ' (' + ('archived' | t) + ')' : '' }}</option> }
                       }
                     </select></td>
                   <td class="num"><input class="cell mono w5 r" type="number" min="0" step="0.01" [value]="r.quantity" (change)="saveNum(r, 'quantity', $event)" [disabled]="readonly()" /></td>
-                  <td class="faint">{{ unitOf(r.materialId) }}{{ g.kind === 'cable' ? ' / m' : '' }}</td>
+                  <td class="faint">{{ unitOf(r.materialId) | tx }}{{ g.kind === 'cable' ? ' / m' : '' }}</td>
                   <td class="num"><input class="cell mono w5 r" type="number" min="0" step="0.5" [value]="r.labourMinutes" (change)="saveNum(r, 'labourMinutes', $event)" [disabled]="readonly()" /></td>
                   <td>@if (!readonly()) { <button class="btn btn-sm btn-ghost btn-danger" type="button" (click)="remove(r)" [attr.aria-label]="'Delete rule' | t">✕</button> }</td>
                 </tr>

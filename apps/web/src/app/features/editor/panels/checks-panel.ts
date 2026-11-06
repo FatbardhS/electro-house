@@ -10,7 +10,7 @@ import { I18N_PIPES } from '../../../core/i18n/t.pipe';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="head">
-      <span class="faint small">{{ issues().length ? issues().length + ' open issue(s) on this floor' : 'No problems on this floor' }}</span>
+      <span class="faint small">{{ issues().length ? ('{n} open issue(s) on this floor' | t: { n: issues().length }) : ('No problems on this floor' | t) }}</span>
       <a class="btn btn-sm btn-ghost" [routerLink]="['/projects', projectId(), 'installation']" [queryParams]="{ tab: 'checks' }">{{ 'All' | t }} →</a>
     </div>
     <ul>
