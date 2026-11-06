@@ -3,6 +3,9 @@ import {
   EMPTY_PROFILE,
   calibrationSchema,
   electricalProfileSchema,
+  readProjectCostSettings,
+  type FloorHeightsInput,
+  type ProjectCostSettings,
   type CableDto,
   type CircuitDto,
   type CircuitInput,
@@ -81,6 +84,8 @@ export class InstallationService {
           name: f.name,
           sortOrder: f.sortOrder,
           metresPerUnit: cal?.success ? cal.data.metresPerUnit : null,
+          ceilingHeightMm: f.ceilingHeightMm,
+          cableRouting: f.cableRouting === 'floor' ? 'floor' : 'ceiling',
           components: f.components.map(toComponentDto),
           wires: f.wires.map(toWireDto),
         };
@@ -88,7 +93,26 @@ export class InstallationService {
       circuits: project.circuits.map(toCircuitDto),
       links: project.floorLinks.map(toLinkDto),
       profile: this.profileOf(project.settings),
+      costSettings: readProjectCostSettings((project.settings as Record<string, unknown> | null)?.['costSettings']),
     };
+  }
+
+  // ── cost settings and floor heights (bill of materials) ──
+
+  async setCostSettings(organizationId: string, projectId: string, cost: ProjectCostSettings): Promise<ProjectCostSettings> {
+    const project = await this.prisma.project.findFirst({ where: { id: projectId, organizationId } });
+    if (!project) throw new NotFoundException('Project not found.');
+    const settings = { ...((project.settings as Record<string, unknown>) ?? {}), costSettings: cost };
+    await this.prisma.project.update({ where: { id: projectId }, data: { settings: settings as unknown as Prisma.InputJsonValue } });
+    return cost;
+  }
+
+  /** Does not touch the floor revisions, so it never conflicts with the editor's autosave. */
+  async setFloorHeights(organizationId: string, floorId: string, input: FloorHeightsInput): Promise<FloorHeightsInput> {
+    const n = await this.prisma.floor.count({ where: { id: floorId, project: { organizationId } } });
+    if (!n) throw new NotFoundException('Floor not found.');
+    await this.prisma.floor.update({ where: { id: floorId }, data: input });
+    return input;
   }
 
   // ── circuits ──

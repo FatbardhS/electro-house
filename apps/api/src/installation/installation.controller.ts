@@ -5,6 +5,10 @@ import {
   electricalProfileSchema,
   floorLinkInputSchema,
   floorLinkUpdateSchema,
+  floorHeightsSchema,
+  projectCostSettingsSchema,
+  type FloorHeightsInput,
+  type ProjectCostSettings,
   type CircuitDto,
   type CircuitInput,
   type ElectricalProfile,
@@ -32,6 +36,24 @@ export class InstallationController {
     @Body(new ZodPipe(electricalProfileSchema)) body: ElectricalProfile,
   ): Promise<ElectricalProfile> {
     return this.installation.setProfile(auth.organizationId, id, body);
+  }
+
+  @Put('projects/:id/cost-settings')
+  setCostSettings(
+    @Auth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(projectCostSettingsSchema)) body: ProjectCostSettings,
+  ): Promise<ProjectCostSettings> {
+    return this.installation.setCostSettings(auth.organizationId, id, body);
+  }
+
+  @Put('floors/:id/heights')
+  setFloorHeights(
+    @Auth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(floorHeightsSchema)) body: FloorHeightsInput,
+  ): Promise<FloorHeightsInput> {
+    return this.installation.setFloorHeights(auth.organizationId, id, body);
   }
 
   @Post('projects/:id/circuits')

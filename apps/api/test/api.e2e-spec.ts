@@ -448,3 +448,191 @@ describe('circuits, boards and floor connections', () => {
     expect((await agent.get(`/api/projects/${project.id}/installation`)).body.profile).toEqual(profile);
   });
 });
+
+describe('price list, material rules and company settings', () => {
+  const { DEFAULT_ORGANIZATION_SETTINGS, EMPTY_COST_SETTINGS } = shared;
+  const box = { code: 'B-60', name: 'Flush box 60', unit: 'pcs', unitPrice: 0.45, packSize: null, category: 'Boxes', archived: false };
+
+  it('starts with default settings and saves valid ones only', async () => {
+    const { agent } = await signUp('Settings Co');
+    expect((await agent.get('/api/organization/settings').expect(200)).body).toEqual(DEFAULT_ORGANIZATION_SETTINGS);
+    const next = { ...DEFAULT_ORGANIZATION_SETTINGS, currency: 'CHF', vatPct: 8.1, company: { ...DEFAULT_ORGANIZATION_SETTINGS.company, phone: '+41 00' } };
+    await agent.put('/api/organization/settings').send(next).expect(200);
+    await agent.put('/api/organization/settings').send({ ...next, currency: 'euro' }).expect(400);
+    expect((await agent.get('/api/organization/settings')).body).toEqual(next);
+  });
+
+  it('creates, updates and protects materials; prices keep their decimals', async () => {
+    const { agent } = await signUp('Materials Co');
+    const m = (await agent.post('/api/materials').send(box).expect(201)).body;
+    expect(m).toMatchObject({ code: 'B-60', unitPrice: 0.45, packSize: null });
+    await agent.post('/api/materials').send({ ...box, name: 'Other' }).expect(409);
+    const upd = (await agent.patch(`/api/materials/${m.id}`).send({ unitPrice: 0.4567 }).expect(200)).body;
+    expect(upd.unitPrice).toBe(0.4567);
+
+    const rule = (await agent.post('/api/material-rules').send({ target: 'component:outlet.double', materialId: m.id, quantity: 1, labourMinutes: 12.5 }).expect(201)).body;
+    expect(rule).toMatchObject({ quantity: 1, labourMinutes: 12.5 });
+    await agent.post('/api/material-rules').send({ target: 'socket', materialId: m.id, quantity: 1, labourMinutes: 0 }).expect(400);
+    await agent.delete(`/api/materials/${m.id}`).expect(409);
+    await agent.delete(`/api/material-rules/${rule.id}`).expect(204);
+    await agent.delete(`/api/materials/${m.id}`).expect(204);
+  });
+
+  it('previews and applies a CSV import, matching rows by code', async () => {
+    const { agent } = await signUp('Import Co');
+    await agent.post('/api/materials').send(box).expect(201);
+    const csv = 'Code;Name;Unit;Price;Pack size\nB-60;Flush box 60;pcs;0,50;\nN-315;NYM-J 3×1,5;m;0,62;100\n';
+    const preview = (await agent.post('/api/materials/import').send({ csv, apply: false }).expect(200)).body;
+    expect(preview).toEqual({ created: 1, updated: 1, errors: [], applied: false });
+    expect((await agent.get('/api/materials')).body).toHaveLength(1);
+    const done = (await agent.post('/api/materials/import').send({ csv, apply: true }).expect(200)).body;
+    expect(done.applied).toBe(true);
+    const list = (await agent.get('/api/materials')).body as shared.MaterialDto[];
+    expect(list.map((m) => [m.code, m.unitPrice, m.packSize])).toEqual(
+      expect.arrayContaining([['B-60', 0.5, null], ['N-315', 0.62, 100]]),
+    );
+    const bad = (await agent.post('/api/materials/import').send({ csv: csv + 'X;Bad;pcs;abc;\n', apply: true }).expect(200)).body;
+    expect(bad).toMatchObject({ applied: false, errors: [{ line: 4 }] });
+
+    const exported = await agent.get('/api/materials/export').expect(200);
+    expect(exported.headers['content-type']).toMatch(/text\/csv/);
+    expect(exported.text).toContain('NYM-J 3×1,5');
+  });
+
+  it('keeps price lists private to each company', async () => {
+    const a = await signUp('Private Prices A');
+    const b = await signUp('Private Prices B');
+    const m = (await a.agent.post('/api/materials').send(box).expect(201)).body;
+    expect((await b.agent.get('/api/materials')).body).toEqual([]);
+    await b.agent.patch(`/api/materials/${m.id}`).send({ unitPrice: 0 }).expect(404);
+    await b.agent.post('/api/material-rules').send({ target: 'component:outlet.double', materialId: m.id, quantity: 1, labourMinutes: 0 }).expect(400);
+  });
+
+  it('adds example materials once', async () => {
+    const { agent } = await signUp('Examples Co');
+    const first = (await agent.post('/api/materials/examples').expect(200)).body.added;
+    expect(first).toBeGreaterThan(0);
+    expect((await agent.post('/api/materials/examples').expect(200)).body.added).toBe(0);
+  });
+
+  it('stores project cost settings and floor heights without touching floor revisions', async () => {
+    const { agent } = await signUp('Cost Co');
+    const client = (await agent.post('/api/clients').send({ name: 'C' })).body;
+    const project = (await agent.post('/api/projects').send({ clientId: client.id, name: 'P' })).body;
+    const floor = (await agent.post(`/api/projects/${project.id}/floors`).send({ name: 'Ground floor' })).body as FloorDto;
+    const cost = { ...EMPTY_COST_SETTINGS, markupPct: 15, extraHours: 3, extraLines: [{ text: 'Testing', amount: 80 }] };
+    await agent.put(`/api/projects/${project.id}/cost-settings`).send(cost).expect(200);
+    await agent.put(`/api/projects/${project.id}/cost-settings`).send({ ...cost, extraLines: [{ text: '', amount: 1 }] }).expect(400);
+    await agent.put(`/api/floors/${floor.id}/heights`).send({ ceilingHeightMm: 2800, cableRouting: 'floor' }).expect(200);
+    await agent.put(`/api/floors/${floor.id}/heights`).send({ ceilingHeightMm: 100, cableRouting: 'floor' }).expect(400);
+    const inst = (await agent.get(`/api/projects/${project.id}/installation`)).body;
+    expect(inst.costSettings).toEqual(cost);
+    expect(inst.floors[0]).toMatchObject({ ceilingHeightMm: 2800, cableRouting: 'floor' });
+    const after = (await agent.get(`/api/projects/${project.id}`)).body as ProjectDto;
+    expect(after.floors[0]!.revision).toBe(floor.revision);
+  });
+});
+
+describe('PDF export', () => {
+  const { createComponent, uuidv7, DEFAULT_CABLE, DEFAULT_EXPORT_OPTIONS } = shared;
+
+  async function textOf(bytes: Buffer): Promise<{ pages: number; text: string[] }> {
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const doc = await pdfjs.getDocument({ data: new Uint8Array(bytes), verbosity: 0 }).promise;
+    const text: string[] = [];
+    for (let i = 1; i <= doc.numPages; i++) {
+      const content = await (await doc.getPage(i)).getTextContent();
+      text.push(content.items.map((it) => ('str' in it ? it.str : '')).join(' '));
+    }
+    return { pages: doc.numPages, text };
+  }
+
+  it('exports plans over the embedded vector plan page, plus schedules, BOM and costs', async () => {
+    const { agent } = await signUp('Export Ëlectric');
+    const client = (await agent.post('/api/clients').send({ name: 'Familja Krasniqi' })).body;
+    const project = (await agent.post('/api/projects').send({ clientId: client.id, name: 'Shtëpia 2026', propertyAddress: 'Rr. Agim Ramadani 5' })).body;
+    const floor = (await agent.post(`/api/projects/${project.id}/floors`).send({ name: 'Kati përdhes' })).body as FloorDto;
+    await agent.put(`/api/floors/${floor.id}/plan`).attach('file', makePdf(1), 'plan.pdf').expect(200);
+    const metresPerUnit = (100 * 25.4) / 72 / 1000; // 1:100 plan
+    await agent
+      .patch(`/api/floors/${floor.id}/settings`)
+      .send({ baseRevision: 1, calibration: { method: 'paper-scale', paperScale: 100, metresPerUnit, calibratedAt: new Date().toISOString() } })
+      .expect(200);
+
+    const board = { ...createComponent('board.main', { x: 100, y: 100 }, uuidv7(), []), label: 'MDB' };
+    const outlet = createComponent('outlet.double', { x: 400, y: 100 }, uuidv7(), []);
+    const wire = {
+      id: uuidv7(),
+      label: 'W1',
+      from: { componentId: board.id, portId: null, x: 100, y: 100 },
+      to: { componentId: outlet.id, portId: null, x: 400, y: 100 },
+      points: [],
+      cable: DEFAULT_CABLE,
+      circuitId: null,
+      description: null,
+    };
+    await agent
+      .patch(`/api/floors/${floor.id}/drawing`)
+      .send({ baseRevision: 0, ops: [{ op: 'upsert', component: board }, { op: 'upsert', component: outlet }, { op: 'upsertWire', wire }] })
+      .expect(200);
+    await agent.post(`/api/projects/${project.id}/circuits`).send({ ...shared.DEFAULT_CIRCUIT, name: 'Prizat', boardComponentId: board.id }).expect(201);
+    const m = (await agent.post('/api/materials').send({ code: 'S2', name: 'Prizë dyshe', unit: 'pcs', unitPrice: 7.5, packSize: null, category: null, archived: false })).body;
+    await agent.post('/api/material-rules').send({ target: 'component:outlet.double', materialId: m.id, quantity: 1, labourMinutes: 15 }).expect(201);
+
+    const res = await agent
+      .post(`/api/projects/${project.id}/exports`)
+      .send(DEFAULT_EXPORT_OPTIONS)
+      .buffer(true)
+      .parse((r, cb) => {
+        const chunks: Buffer[] = [];
+        r.on('data', (c: Buffer) => chunks.push(c));
+        r.on('end', () => cb(null, Buffer.concat(chunks)));
+      })
+      .expect(200);
+    expect(res.headers['content-type']).toBe('application/pdf');
+    expect(res.headers['content-disposition']).toContain('.pdf');
+    const bytes = res.body as Buffer;
+
+    const { pages, text } = await textOf(bytes);
+    // cover, 1 floor sheet, legend, circuits, boards, links, BOM, costs
+    expect(pages).toBe(8);
+    expect(text[0]).toContain('Shtëpia 2026');
+    expect(text[0]).toContain('Familja Krasniqi');
+    expect(text[1]).toContain('Kati përdhes');
+    expect(text[1]).toMatch(/1:\d+/);
+    expect(text[1]).toContain('MDB');
+    expect(text[2]).toContain('Double outlet');
+    expect(text[3]).toContain('Prizat');
+    expect(text.join(' ')).toContain('Prizë dyshe');
+    expect(text[7]).toContain('7.50 EUR');
+
+    // The plan page is embedded as a vector form XObject, not as an image.
+    const { PDFDocument, PDFName, PDFDict } = await import('pdf-lib');
+    const out = await PDFDocument.load(bytes);
+    const resources = out.getPage(1).node.Resources()!;
+    const xobjects = resources.lookup(PDFName.of('XObject'), PDFDict);
+    const subtypes = xobjects.keys().map((k) => String((xobjects.lookup(k) as unknown as { dict: { get(n: unknown): unknown } }).dict.get(PDFName.of('Subtype'))));
+    expect(subtypes).toContain('/Form');
+    expect(subtypes).not.toContain('/Image');
+  });
+
+  it('honours sections and refuses other companies', async () => {
+    const { agent } = await signUp('Export Sections Co');
+    const client = (await agent.post('/api/clients').send({ name: 'C' })).body;
+    const project = (await agent.post('/api/projects').send({ clientId: client.id, name: 'P' })).body;
+    const res = await agent
+      .post(`/api/projects/${project.id}/exports`)
+      .send({ ...DEFAULT_EXPORT_OPTIONS, sections: ['costs'] })
+      .buffer(true)
+      .parse((r, cb) => {
+        const chunks: Buffer[] = [];
+        r.on('data', (c: Buffer) => chunks.push(c));
+        r.on('end', () => cb(null, Buffer.concat(chunks)));
+      })
+      .expect(200);
+    expect((await textOf(res.body as Buffer)).pages).toBe(1);
+    await agent.post(`/api/projects/${project.id}/exports`).send({ ...DEFAULT_EXPORT_OPTIONS, sections: [] }).expect(400);
+    const other = await signUp('Export Other Co');
+    await other.agent.post(`/api/projects/${project.id}/exports`).send(DEFAULT_EXPORT_OPTIONS).expect(404);
+  });
+});

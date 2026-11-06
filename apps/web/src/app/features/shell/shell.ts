@@ -13,6 +13,7 @@ import { BrandMark } from '../../shared/ui/brand-mark';
       <nav>
         <a routerLink="/clients" routerLinkActive="active">Clients</a>
         <a routerLink="/projects" routerLinkActive="active">Projects</a>
+        <a routerLink="/settings" routerLinkActive="active">Settings</a>
       </nav>
       <div class="spacer"></div>
       @if (auth.session(); as s) {

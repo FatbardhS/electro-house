@@ -8,7 +8,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Global, Injectable, Logger, Module, OnModuleInit } from '@nestjs/common';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, resolve, sep } from 'node:path';
 import { env } from '../config/env.js';
 
@@ -71,6 +71,14 @@ export class StorageService implements OnModuleInit {
       return;
     }
     await this.s3!.send(new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: body, ContentType: contentType }));
+  }
+
+  /** Reads a whole stored file (used by the PDF export to embed plan pages). */
+  async get(key: string): Promise<Buffer> {
+    if (this.driver === 'local') return readFile(this.localPath(key));
+    const res = await this.s3!.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+    if (!res.Body) throw new Error(`Stored file is empty: ${key}`);
+    return Buffer.from(await res.Body.transformToByteArray());
   }
 
   async delete(key: string): Promise<void> {

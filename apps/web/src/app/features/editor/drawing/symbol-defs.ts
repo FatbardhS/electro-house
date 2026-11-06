@@ -1,20 +1,8 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { COMPONENT_TYPES, type LayerKey, type SymbolPrimitive } from '@electro/shared';
+import { COMPONENT_TYPES, SYMBOL_STROKE_MM, type SymbolPrimitive } from '@electro/shared';
 
-/** Colour per layer, chosen to read well on white paper and be distinguishable from each other. */
-export const LAYER_COLORS: Record<LayerKey, string> = {
-  wiring: '#111827',
-  lighting: '#c2410c',
-  outlets: '#1d4ed8',
-  switches: '#7e22ce',
-  data: '#0e7490',
-  smart: '#be185d',
-  distribution: '#b91c1c',
-  annotations: '#374151',
-};
-
-/** Stroke width of symbols in paper millimetres (≈ a 0.25 mm pen). */
-export const SYMBOL_STROKE_MM = 0.25;
+// Defined in @electro/shared so the PDF export uses the same colours and pen widths.
+export { LAYER_COLORS, SYMBOL_STROKE_MM } from '@electro/shared';
 
 export function symbolId(typeKey: string): string {
   return `sym-${typeKey.replace(/[^a-z0-9-]/gi, '_')}`;

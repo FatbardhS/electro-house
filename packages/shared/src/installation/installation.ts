@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { CATEGORIES, type Category } from '../catalog/types.js';
 import { componentType } from '../catalog/catalog.js';
 import type { ComponentDto } from '../drawing/drawing.js';
+import type { ProjectCostSettings } from '../reports/settings.js';
 import { cableSchema, cableSummary, wireLengthUnits, type CableDto, type WireDto } from '../drawing/wires.js';
 
 // ── Circuits ────────────────────────────────────────────────────────────
@@ -139,6 +140,10 @@ export interface FloorInstallationDto {
   sortOrder: number;
   /** null when the floor is not calibrated: its wire lengths cannot be measured. */
   metresPerUnit: number | null;
+  /** Floor-to-ceiling height, used for vertical cable drops to components. */
+  ceilingHeightMm: number;
+  /** Where cables run on this floor: drops go down from the ceiling or up from the floor. */
+  cableRouting: CableRouting;
   components: ComponentDto[];
   wires: WireDto[];
 }
@@ -149,7 +154,18 @@ export interface InstallationDto {
   circuits: CircuitDto[];
   links: FloorLinkDto[];
   profile: ElectricalProfile;
+  costSettings: ProjectCostSettings;
 }
+
+export const CABLE_ROUTINGS = ['ceiling', 'floor'] as const;
+export type CableRouting = (typeof CABLE_ROUTINGS)[number];
+export const DEFAULT_CEILING_HEIGHT_MM = 2600;
+
+export const floorHeightsSchema = z.object({
+  ceilingHeightMm: z.number().int().min(1500, 'Ceiling height must be at least 1500 mm.').max(20_000),
+  cableRouting: z.enum(CABLE_ROUTINGS),
+});
+export type FloorHeightsInput = z.infer<typeof floorHeightsSchema>;
 
 // ── Calculations ────────────────────────────────────────────────────────
 

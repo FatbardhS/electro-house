@@ -18,6 +18,10 @@ import { DrawingController } from './drawing/drawing.controller.js';
 import { DrawingService } from './drawing/drawing.service.js';
 import { InstallationController } from './installation/installation.controller.js';
 import { InstallationService } from './installation/installation.service.js';
+import { PricingController } from './pricing/pricing.controller.js';
+import { PricingService } from './pricing/pricing.service.js';
+import { ExportController } from './exports/export.controller.js';
+import { ExportService } from './exports/export.service.js';
 
 @Module({
   imports: [
@@ -29,7 +33,7 @@ import { InstallationService } from './installation/installation.service.js';
       skipIf: () => process.env['NODE_ENV'] === 'test',
     }),
   ],
-  controllers: [AuthController, ClientsController, ProjectsController, FloorsController, DrawingController, InstallationController],
+  controllers: [AuthController, ClientsController, ProjectsController, FloorsController, DrawingController, InstallationController, PricingController, ExportController],
   providers: [
     AuthService,
     ClientsService,
@@ -38,6 +42,8 @@ import { InstallationService } from './installation/installation.service.js';
     PlanFilesService,
     DrawingService,
     InstallationService,
+    PricingService,
+    ExportService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: SessionGuard },
     { provide: APP_FILTER, useClass: ApiExceptionFilter },

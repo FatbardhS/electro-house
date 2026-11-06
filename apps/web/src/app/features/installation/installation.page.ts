@@ -9,13 +9,16 @@ import { CircuitsTable } from './circuits-table';
 import { LinksView } from './links-view';
 import { ProfileForm } from './profile-form';
 import { TotalsView } from './totals-view';
+import { MaterialsView } from './materials-view';
+import { ExportDialog } from './export-dialog';
+import { Modal } from '../../shared/ui/modal';
 
-type Tab = 'circuits' | 'boards' | 'links' | 'totals' | 'rules';
+type Tab = 'circuits' | 'boards' | 'links' | 'totals' | 'materials' | 'rules';
 
 /** Electrical management of a whole project: circuits, boards, floor connections, calculations. */
 @Component({
   selector: 'app-installation-page',
-  imports: [RouterLink, LoadingState, ErrorState, CircuitsTable, BoardsView, LinksView, TotalsView, ProfileForm],
+  imports: [RouterLink, LoadingState, ErrorState, CircuitsTable, BoardsView, LinksView, TotalsView, MaterialsView, ProfileForm, ExportDialog, Modal],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="page wide">
@@ -25,7 +28,14 @@ type Tab = 'circuits' | 'boards' | 'links' | 'totals' | 'rules';
           <h1>Circuits & calculations</h1>
           <div class="subtitle">Values update from the floor plans. Loads and currents are estimates for planning; verify against your national standard.</div>
         </div>
+        <button class="btn btn-primary" type="button" (click)="exporting.set(true)" [disabled]="!data.hasValue()">Export PDF</button>
       </div>
+
+      <app-modal heading="Export PDF" [open]="exporting()" (closed)="exporting.set(false)">
+        @if (exporting() && data.hasValue()) {
+          <app-export-dialog [installation]="data.value()" [projectName]="project.hasValue() ? project.value().name : 'project'" (closed)="exporting.set(false)" />
+        }
+      </app-modal>
 
       <div class="tabs" role="tablist">
         @for (t of tabs; track t.id) {
@@ -44,6 +54,7 @@ type Tab = 'circuits' | 'boards' | 'links' | 'totals' | 'rules';
           @case ('boards') { <app-boards-view [installation]="inst" [schedules]="schedules()" /> }
           @case ('links') { <app-links-view [installation]="inst" (changed)="data.reload()" /> }
           @case ('totals') { <app-totals-view [installation]="inst" [totals]="totals()" [loads]="loads()" /> }
+          @case ('materials') { <app-materials-view [installation]="inst" (changed)="data.reload()" /> }
           @case ('rules') { <app-profile-form [projectId]="projectId()" [profile]="inst.profile" (changed)="data.reload()" /> }
         }
       }
@@ -63,11 +74,13 @@ export class InstallationPage {
   protected readonly project = httpResource<ProjectDto>(() => `/api/projects/${this.projectId()}`);
   protected readonly data = httpResource<InstallationDto>(() => `/api/projects/${this.projectId()}/installation`);
   protected readonly tab = signal<Tab>('circuits');
+  protected readonly exporting = signal(false);
   protected readonly tabs: { id: Tab; label: string }[] = [
     { id: 'circuits', label: 'Circuits' },
     { id: 'boards', label: 'Distribution boards' },
     { id: 'links', label: 'Floor connections' },
     { id: 'totals', label: 'Calculations' },
+    { id: 'materials', label: 'Materials & costs' },
     { id: 'rules', label: 'Rules profile' },
   ];
   protected message = errorMessage;

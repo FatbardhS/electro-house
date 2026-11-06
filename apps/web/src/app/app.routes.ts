@@ -52,6 +52,11 @@ export const routes: Routes = [
         title: 'Circuits & calculations · Electro House',
         loadComponent: () => import('./features/installation/installation.page').then((m) => m.InstallationPage),
       },
+      {
+        path: 'settings',
+        title: 'Settings · Electro House',
+        loadComponent: () => import('./features/settings/settings.page').then((m) => m.SettingsPage),
+      },
     ],
   },
   { path: '**', redirectTo: '' },

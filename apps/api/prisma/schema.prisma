@@ -18,10 +18,14 @@ model Organization {
   id        String       @id @default(uuid()) @db.Uuid
   name      String
   createdAt DateTime     @default(now())
+  /// Company settings: currency, VAT, markup, labour rate, allowances, title-block details. See `organizationSettingsSchema`.
+  settings  Json         @default("{}")
   members   Membership[]
   clients   Client[]
   projects  Project[]
   files     StoredFile[]
+  materials Material[]
+  materialRules MaterialRule[]
 }
 
 model User {
@@ -130,6 +134,10 @@ model Floor {
   revision              Int         @default(0)
   /// Revision of the drawing (components, layers); separate from settings so the two autosaves never conflict.
   drawingRevision       Int         @default(0)
+  /// Floor-to-ceiling height for vertical cable drops in the bill of materials.
+  ceilingHeightMm       Int         @default(2600)
+  /// "ceiling" | "floor": where cables run on this floor.
+  cableRouting          String      @default("ceiling")
   createdAt             DateTime    @default(now())
   updatedAt             DateTime    @updatedAt
   project               Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -280,4 +288,41 @@ model FloorLink {
   circuit         Circuit?  @relation(fields: [circuitId], references: [id], onDelete: SetNull)
 
   @@index([projectId])
+}
+
+// ── Prices & materials ────────────────────────────────────────
+
+/// A line of the company price list. Prices are net, in the organization currency.
+model Material {
+  id             String         @id @default(uuid()) @db.Uuid
+  organizationId String         @db.Uuid
+  code           String?
+  name           String
+  unit           String
+  unitPrice      Decimal        @db.Decimal(12, 4)
+  packSize       Decimal?       @db.Decimal(12, 3)
+  category       String?
+  archived       Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  rules          MaterialRule[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, name])
+}
+
+/// What a component type ("component:<typeKey>") or a cable ("cable:<type>|<cores>|<mm²>", parts may be "*") consumes.
+model MaterialRule {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  target         String
+  materialId     String       @db.Uuid
+  quantity       Decimal      @db.Decimal(12, 4)
+  labourMinutes  Decimal      @default(0) @db.Decimal(10, 2)
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  material       Material     @relation(fields: [materialId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, target])
 }

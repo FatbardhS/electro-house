@@ -7,6 +7,14 @@ import type {
   ClientDto,
   DrawingDto,
   ElectricalProfile,
+  ExportOptions,
+  FloorHeightsInput,
+  MaterialDto,
+  MaterialInput,
+  MaterialRuleDto,
+  MaterialRuleInput,
+  OrganizationSettings,
+  ProjectCostSettings,
   FloorLinkDto,
   FloorLinkInput,
   InstallationDto,
@@ -99,6 +107,52 @@ export class Api {
   }
   setElectricalProfile(projectId: string, profile: ElectricalProfile) {
     return firstValueFrom(this.http.put<ElectricalProfile>(`/api/projects/${projectId}/electrical-profile`, profile));
+  }
+  setCostSettings(projectId: string, settings: ProjectCostSettings) {
+    return firstValueFrom(this.http.put<ProjectCostSettings>(`/api/projects/${projectId}/cost-settings`, settings));
+  }
+  setFloorHeights(floorId: string, input: FloorHeightsInput) {
+    return firstValueFrom(this.http.put<FloorHeightsInput>(`/api/floors/${floorId}/heights`, input));
+  }
+  // Company settings, price list and material rules
+  getOrganizationSettings() {
+    return firstValueFrom(this.http.get<OrganizationSettings>('/api/organization/settings'));
+  }
+  setOrganizationSettings(settings: OrganizationSettings) {
+    return firstValueFrom(this.http.put<OrganizationSettings>('/api/organization/settings', settings));
+  }
+  createMaterial(input: MaterialInput) {
+    return firstValueFrom(this.http.post<MaterialDto>('/api/materials', input));
+  }
+  updateMaterial(id: string, input: Partial<MaterialInput>) {
+    return firstValueFrom(this.http.patch<MaterialDto>(`/api/materials/${id}`, input));
+  }
+  deleteMaterial(id: string) {
+    return firstValueFrom(this.http.delete<void>(`/api/materials/${id}`));
+  }
+  importMaterials(csv: string, apply: boolean) {
+    return firstValueFrom(
+      this.http.post<{ created: number; updated: number; errors: { line: number; message: string }[]; applied: boolean }>(
+        '/api/materials/import',
+        { csv, apply },
+      ),
+    );
+  }
+  addExampleMaterials() {
+    return firstValueFrom(this.http.post<{ added: number }>('/api/materials/examples', {}));
+  }
+  createRule(input: MaterialRuleInput) {
+    return firstValueFrom(this.http.post<MaterialRuleDto>('/api/material-rules', input));
+  }
+  updateRule(id: string, input: Partial<MaterialRuleInput>) {
+    return firstValueFrom(this.http.patch<MaterialRuleDto>(`/api/material-rules/${id}`, input));
+  }
+  deleteRule(id: string) {
+    return firstValueFrom(this.http.delete<void>(`/api/material-rules/${id}`));
+  }
+  /** Generates a PDF on the server and returns it as a Blob. */
+  exportPdf(projectId: string, options: ExportOptions) {
+    return firstValueFrom(this.http.post(`/api/projects/${projectId}/exports`, options, { responseType: 'blob' }));
   }
   planUrl(id: string) {
     return firstValueFrom(this.http.get<PlanUrlDto>(`/api/floors/${id}/plan-url`));
