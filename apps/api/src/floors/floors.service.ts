@@ -125,13 +125,13 @@ export class FloorsService {
     };
   }
 
-  /** Local storage driver only: absolute path of the plan file, for streaming with Range support. */
-  async localPlanPath(organizationId: string, id: string): Promise<string> {
+  /** Plan file served by the API: a local path (development) or an S3 object streamed through (S3_PROXY_READS). */
+  async servedPlan(organizationId: string, id: string): Promise<{ kind: 'local'; absolutePath: string } | { kind: 'proxy'; key: string }> {
     const floor = await this.find(organizationId, id);
     if (!floor.planFile) throw new NotFoundException('This floor has no plan uploaded yet.');
     const location = await this.storage.readLocation(floor.planFile.storageKey);
-    if (location.kind !== 'local') throw new NotFoundException('Plans are served from object storage.');
-    return location.absolutePath;
+    if (location.kind === 'url') throw new NotFoundException('Plans are served from object storage.');
+    return location;
   }
 
   /** Loads a floor, enforcing that it belongs to the caller's organization. */

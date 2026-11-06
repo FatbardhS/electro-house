@@ -2,7 +2,7 @@ import type { BillingInterval, SubscriptionStatus } from '@electro/shared';
 
 /** What the rest of the app needs from a payment provider. Card data never passes through our server. */
 export interface BillingProvider {
-  readonly name: 'paddle' | 'dev';
+  readonly name: 'paddle' | 'dev' | 'none';
   /** URL of the provider's hosted checkout for one company. */
   checkoutUrl(req: CheckoutRequest): Promise<string>;
   /** URL of the provider's customer portal (payment method, invoices, cancel). */

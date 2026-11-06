@@ -1,5 +1,6 @@
 import { SUBSCRIPTION_STATUSES, type BillingInterval, type BillingState, type SubscriptionStatus } from '@electro/shared';
 import type { Organization } from '../generated/prisma/client.js';
+import { env } from '../config/env.js';
 
 export type BillingColumns = Pick<
   Organization,
@@ -17,7 +18,15 @@ export const BILLING_SELECT = {
   seats: true,
 } as const;
 
+/** With `BILLING_PROVIDER=none` every company counts as active (full access, no trial banners). */
+export function billingEnabled(): boolean {
+  return env().BILLING_PROVIDER !== 'none';
+}
+
 export function billingStateOf(o: BillingColumns): BillingState {
+  if (!billingEnabled()) {
+    return { status: 'active', trialEndsAt: null, currentPeriodEnd: null, cancelAtPeriodEnd: false, pastDueSince: null, interval: null, seats: o.seats };
+  }
   const status = (SUBSCRIPTION_STATUSES as readonly string[]).includes(o.subscriptionStatus)
     ? (o.subscriptionStatus as SubscriptionStatus)
     : 'expired';

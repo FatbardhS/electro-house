@@ -17,9 +17,14 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((v) => v === 'true'),
+  /** Stream plan PDFs through the API instead of presigned S3 URLs (no bucket CORS needed). */
+  S3_PROXY_READS: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
-  /** `paddle` for real subscriptions; `dev` simulates checkout locally (refused in production). */
-  BILLING_PROVIDER: z.enum(['dev', 'paddle']).default('dev'),
+  /** `paddle` for real subscriptions; `dev` simulates checkout locally (refused in production); `none` = billing off, every company has full access (testing deployments). */
+  BILLING_PROVIDER: z.enum(['dev', 'paddle', 'none']).default('dev'),
   /** Paddle Billing: `sandbox` for testing, `production` for real payments. */
   PADDLE_ENV: z.enum(['sandbox', 'production']).default('sandbox'),
   PADDLE_API_KEY: z.string().min(1).optional(),

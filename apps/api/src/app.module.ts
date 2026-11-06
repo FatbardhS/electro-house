@@ -25,6 +25,7 @@ import { ExportService } from './exports/export.service.js';
 import { BillingModule } from './billing/billing.module.js';
 import { InvitationsController, TeamController } from './team/team.controller.js';
 import { TeamService } from './team/team.service.js';
+import { HealthController } from './health.controller.js';
 
 @Module({
   imports: [
@@ -37,7 +38,7 @@ import { TeamService } from './team/team.service.js';
       skipIf: () => process.env['NODE_ENV'] === 'test',
     }),
   ],
-  controllers: [AuthController, ClientsController, ProjectsController, FloorsController, DrawingController, InstallationController, PricingController, ExportController, TeamController, InvitationsController],
+  controllers: [HealthController, AuthController, ClientsController, ProjectsController, FloorsController, DrawingController, InstallationController, PricingController, ExportController, TeamController, InvitationsController],
   providers: [
     AuthService,
     ClientsService,

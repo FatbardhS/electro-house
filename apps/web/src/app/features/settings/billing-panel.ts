@@ -56,6 +56,10 @@ const STATUS_TEXT: Record<BillingDto['status'], string> = {
         </section>
       }
 
+      @if (b.provider === 'none') {
+        <section class="card off"><h3>Billing is not enabled on this server</h3>
+          <p class="faint small">This is a test installation: every company has full access and nothing is charged.</p></section>
+      }
       <div class="grid">
         <section class="card status">
           <h3>Subscription</h3>
@@ -123,6 +127,7 @@ const STATUS_TEXT: Record<BillingDto['status'], string> = {
     .option .btn { margin-top: 8px; }
     .price { font-size: 22px; font-weight: 700; }
     .dev { margin-bottom: 16px; border-color: var(--warn); }
+    .off { margin-bottom: 16px; }
     .dev p { font-size: 13px; color: var(--text-muted); margin: 0 0 10px; }
     .tag { font-size: 11px; font-weight: 600; color: var(--warn); background: var(--warn-soft); padding: 2px 8px; border-radius: 999px; }
     @media (max-width: 520px) { .options { grid-template-columns: 1fr; } }
@@ -146,7 +151,7 @@ export class BillingPanel {
   protected readonly canManage = computed(() => this.auth.session()?.organization.role !== 'MEMBER');
   protected readonly canSubscribe = computed(() => {
     const b = this.billing.value();
-    return !!b && (!b.hasSubscription || b.status === 'expired');
+    return !!b && b.provider !== 'none' && (!b.hasSubscription || b.status === 'expired');
   });
 
   protected days(iso: string | null): number {

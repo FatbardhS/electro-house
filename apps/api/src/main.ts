@@ -13,6 +13,11 @@ const { configureApp } = await import('./app.setup.js');
 // rawBody: payment provider webhooks are verified against the exact bytes they signed.
 const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
 configureApp(app);
+if (config.NODE_ENV === 'production') {
+  const { serveWebApp } = await import('./web-app.js');
+  const dir = serveWebApp(app);
+  console.log(dir ? `Serving the web app from ${dir}` : 'Web app build not found: serving the API only.');
+}
 app.enableShutdownHooks();
 await app.listen(config.PORT);
 console.log(`Electro House API listening on http://localhost:${config.PORT}/api`);

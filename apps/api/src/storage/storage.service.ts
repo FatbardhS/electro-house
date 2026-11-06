@@ -10,12 +10,14 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Global, Injectable, Logger, Module, OnModuleInit } from '@nestjs/common';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, resolve, sep } from 'node:path';
+import type { Readable } from 'node:stream';
 import { env } from '../config/env.js';
 
 /** Where the browser should read a stored file from. */
 export type ReadLocation =
   | { kind: 'url'; url: string; expiresAt: Date } // presigned S3 URL, read directly by the browser
-  | { kind: 'local'; absolutePath: string }; // development only: streamed by the API
+  | { kind: 'local'; absolutePath: string } // development only: streamed by the API
+  | { kind: 'proxy'; key: string }; // S3 object streamed by the API (S3_PROXY_READS=true)
 
 /**
  * Object storage for original plan PDFs.
@@ -89,8 +91,22 @@ export class StorageService implements OnModuleInit {
     await this.s3!.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }
 
+  /**
+   * Streams an object through the API (S3_PROXY_READS=true): no presigned URLs or bucket CORS needed.
+   * Passes an HTTP Range header through, so PDF.js can load large plans in parts.
+   */
+  async stream(key: string, range: string | undefined): Promise<{ status: 200 | 206; headers: Record<string, string>; body: Readable }> {
+    const res = await this.s3!.send(new GetObjectCommand({ Bucket: this.bucket, Key: key, Range: range && /^bytes=\d*-\d*$/.test(range) ? range : undefined }));
+    if (!res.Body) throw new Error(`Stored file is empty: ${key}`);
+    const headers: Record<string, string> = { 'Accept-Ranges': 'bytes', 'Content-Type': 'application/pdf' };
+    if (res.ContentLength !== undefined) headers['Content-Length'] = String(res.ContentLength);
+    if (res.ContentRange) headers['Content-Range'] = res.ContentRange;
+    return { status: res.ContentRange ? 206 : 200, headers, body: res.Body as Readable };
+  }
+
   async readLocation(key: string, expiresInSeconds = 900): Promise<ReadLocation> {
     if (this.driver === 'local') return { kind: 'local', absolutePath: this.localPath(key) };
+    if (env().S3_PROXY_READS) return { kind: 'proxy', key };
     const url = await getSignedUrl(this.s3!, new GetObjectCommand({ Bucket: this.bucket, Key: key }), {
       expiresIn: expiresInSeconds,
     });

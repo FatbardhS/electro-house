@@ -9,11 +9,12 @@ import {
   Patch,
   Post,
   Put,
+  Req,
   Res,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   MAX_PLAN_FILE_BYTES,
@@ -30,10 +31,14 @@ import { Auth, type AuthContext } from '../auth/auth-context.js';
 import { ZodPipe } from '../common/zod-validation.pipe.js';
 import type { UploadedPdf } from '../files/plan-files.service.js';
 import { FloorsService } from './floors.service.js';
+import { StorageService } from '../storage/storage.service.js';
 
 @Controller()
 export class FloorsController {
-  constructor(private readonly floors: FloorsService) {}
+  constructor(
+    private readonly floors: FloorsService,
+    private readonly storage: StorageService,
+  ) {}
 
   @Post('projects/:projectId/floors')
   create(
@@ -91,16 +96,25 @@ export class FloorsController {
     return this.floors.planUrl(auth.organizationId, id);
   }
 
-  /** Streams the plan PDF when using the local storage driver (development). Supports HTTP Range for PDF.js. */
+  /** Streams the plan PDF (local storage, or S3 with S3_PROXY_READS). Supports HTTP Range for PDF.js. */
   @Get('floors/:id/plan')
   async plan(
     @Auth() auth: AuthContext,
     @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
-    const path = await this.floors.localPlanPath(auth.organizationId, id);
+    const served = await this.floors.servedPlan(auth.organizationId, id);
     res.setHeader('Cache-Control', 'private, max-age=3600');
-    res.sendFile(path, { dotfiles: 'allow', headers: { 'Content-Type': 'application/pdf' } });
+    if (served.kind === 'local') {
+      res.sendFile(served.absolutePath, { dotfiles: 'allow', headers: { 'Content-Type': 'application/pdf' } });
+      return;
+    }
+    const range = typeof req.headers.range === 'string' ? req.headers.range : undefined;
+    const { status, headers, body } = await this.storage.stream(served.key, range);
+    res.status(status).set(headers);
+    body.on('error', () => res.destroy());
+    body.pipe(res);
   }
 
   @Delete('floors/:id')
