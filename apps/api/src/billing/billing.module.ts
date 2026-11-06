@@ -22,5 +22,6 @@ function createProvider(): BillingProvider {
 @Module({
   controllers: [BillingController],
   providers: [BillingService, { provide: BILLING_PROVIDER, useFactory: createProvider }],
+  exports: [BillingService],
 })
 export class BillingModule {}

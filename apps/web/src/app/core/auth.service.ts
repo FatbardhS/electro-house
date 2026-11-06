@@ -57,6 +57,20 @@ export class AuthService {
     }
   }
 
+  /** Uses a session returned by the API (joining a company by invitation). */
+  adopt(session: SessionDto): void {
+    this.sessionState.set(session);
+    this.loading = undefined;
+  }
+
+  /** Makes another of the user's companies the active one, then reloads the app on the clients page. */
+  async switchOrganization(organizationId: string): Promise<void> {
+    const s = await firstValueFrom(this.http.post<SessionDto>('/api/auth/switch', { organizationId }));
+    this.sessionState.set(s);
+    // Every page holds data of the previous company: a full reload is the simplest correct reset.
+    window.location.assign('/clients');
+  }
+
   /** Re-reads the session (e.g. after a subscription change, or when the API reports read-only mode). */
   async refresh(): Promise<void> {
     try {

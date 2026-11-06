@@ -1,9 +1,9 @@
 import { Body, Controller, Get, HttpCode, Post, Res } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
-import { signInSchema, signUpSchema, type SessionDto, type SignInInput, type SignUpInput } from '@electro/shared';
+import { signInSchema, signUpSchema, switchOrganizationSchema, type SessionDto, type SignInInput, type SignUpInput } from '@electro/shared';
 import { ZodPipe } from '../common/zod-validation.pipe.js';
-import { env } from '../config/env.js';
+import { setSessionCookie } from './session-cookie.js';
 import { AuthService } from './auth.service.js';
 import { AllowReadOnly, Auth, Public, SESSION_COOKIE, type AuthContext } from './auth-context.js';
 
@@ -49,13 +49,15 @@ export class AuthController {
     return this.auth.describe(auth);
   }
 
+  /** Switches the active company (only to one the user belongs to). */
+  @Post('switch')
+  @AllowReadOnly()
+  @HttpCode(200)
+  switch(@Auth() auth: AuthContext, @Body(new ZodPipe(switchOrganizationSchema)) body: { organizationId: string }): Promise<SessionDto> {
+    return this.auth.switchOrganization(auth, body.organizationId);
+  }
+
   private setCookie(res: Response, token: string, expiresAt: Date) {
-    res.cookie(SESSION_COOKIE, token, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: env().NODE_ENV === 'production',
-      expires: expiresAt,
-      path: '/',
-    });
+    setSessionCookie(res, token, expiresAt);
   }
 }

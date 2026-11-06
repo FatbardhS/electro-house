@@ -21,7 +21,10 @@ export interface OrganizationDto {
 
 export interface SessionDto {
   user: UserDto;
+  /** The active company. */
   organization: OrganizationDto;
+  /** Every company the user belongs to (for the company switcher). */
+  organizations: { id: string; name: string; role: 'OWNER' | 'ADMIN' | 'MEMBER' }[];
 }
 
 export interface ClientDto {

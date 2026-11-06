@@ -49,6 +49,14 @@ export class PaddleBillingProvider implements BillingProvider {
     return res.data.urls.general.overview;
   }
 
+  /** New quantity on the subscription's item, prorated onto the next bill. */
+  async updateSeats(subscriptionId: string, interval: BillingInterval, seats: number): Promise<void> {
+    await this.call('PATCH', `/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+      items: [{ price_id: this.config.prices[interval], quantity: Math.max(1, seats) }],
+      proration_billing_mode: 'prorated_next_billing_period',
+    });
+  }
+
   /**
    * Verifies `Paddle-Signature: ts=<unix>;h1=<hex hmac>` where the signed payload is `<ts>:<raw body>`,
    * then maps subscription.* events.

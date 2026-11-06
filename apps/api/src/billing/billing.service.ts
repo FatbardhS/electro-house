@@ -116,6 +116,50 @@ export class BillingService {
     return true;
   }
 
+  /**
+   * Seats follow the number of members. Called after someone joins or leaves. Only changes a subscription that is
+   * still running; during the trial nothing is charged. A provider error is logged and reported, not thrown, because
+   * the membership change itself already happened.
+   */
+  async syncSeats(organizationId: string): Promise<{ seats: number; updated: boolean; error: string | null }> {
+    const org = await this.prisma.organization.findUniqueOrThrow({
+      where: { id: organizationId },
+      include: { _count: { select: { members: true } } },
+    });
+    const members = Math.max(1, org._count.members);
+    const state = billingStateOf(org);
+    const running = ['active', 'past_due', 'canceled'].includes(billingSummary(state).status);
+    if (!org.providerSubscriptionId || !running || !state.interval || org.seats === members) {
+      return { seats: org.seats, updated: false, error: null };
+    }
+    try {
+      await this.provider.updateSeats(org.providerSubscriptionId, state.interval, members);
+      if (this.provider instanceof DevBillingProvider) {
+        const delivery = this.provider.seatsEvent(
+          {
+            id: org.providerSubscriptionId,
+            customerId: org.providerCustomerId,
+            organizationId: org.id,
+            status: state.status,
+            interval: state.interval,
+            seats: org.seats,
+            currentPeriodEnd: org.currentPeriodEnd,
+            cancelAtPeriodEnd: org.cancelAtPeriodEnd,
+          },
+          members,
+        );
+        await this.handleWebhook('dev', delivery.body, delivery.headers);
+      } else {
+        // Shown at once; the provider's webhook confirms it.
+        await this.prisma.organization.update({ where: { id: organizationId }, data: { seats: members } });
+      }
+      return { seats: members, updated: true, error: null };
+    } catch (err) {
+      this.logger.error(`Seat update for ${organizationId} failed: ${(err as Error).message}`);
+      return { seats: org.seats, updated: false, error: 'The subscription could not be updated with the new number of users. It will be retried.' };
+    }
+  }
+
   // ── development provider only ──
 
   /** Completes a simulated checkout through the normal webhook path. */

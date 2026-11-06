@@ -40,6 +40,7 @@ model Organization {
   files     StoredFile[]
   materials Material[]
   materialRules MaterialRule[]
+  invitations   Invitation[]
 }
 
 model User {
@@ -47,9 +48,12 @@ model User {
   email        String       @unique
   name         String
   passwordHash String
+  /// Company opened at sign-in (the one used last). Null = the first membership.
+  lastOrganizationId String? @db.Uuid
   createdAt    DateTime     @default(now())
   memberships  Membership[]
   sessions     Session[]
+  invitationsSent Invitation[]
 }
 
 enum MemberRole {
@@ -355,4 +359,25 @@ model BillingEvent {
 
   @@unique([provider, eventId])
   @@index([organizationId])
+}
+
+// ── Team ──────────────────────────────────────────────────────
+
+/// Single-use invitation to join a company. Only the SHA-256 of the link token is stored.
+model Invitation {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  email          String
+  role           MemberRole
+  tokenHash      String       @unique
+  invitedById    String       @db.Uuid
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedBy      User         @relation(fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([email])
 }

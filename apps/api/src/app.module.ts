@@ -23,6 +23,8 @@ import { PricingService } from './pricing/pricing.service.js';
 import { ExportController } from './exports/export.controller.js';
 import { ExportService } from './exports/export.service.js';
 import { BillingModule } from './billing/billing.module.js';
+import { InvitationsController, TeamController } from './team/team.controller.js';
+import { TeamService } from './team/team.service.js';
 
 @Module({
   imports: [
@@ -35,7 +37,7 @@ import { BillingModule } from './billing/billing.module.js';
       skipIf: () => process.env['NODE_ENV'] === 'test',
     }),
   ],
-  controllers: [AuthController, ClientsController, ProjectsController, FloorsController, DrawingController, InstallationController, PricingController, ExportController],
+  controllers: [AuthController, ClientsController, ProjectsController, FloorsController, DrawingController, InstallationController, PricingController, ExportController, TeamController, InvitationsController],
   providers: [
     AuthService,
     ClientsService,
@@ -46,6 +48,7 @@ import { BillingModule } from './billing/billing.module.js';
     InstallationService,
     PricingService,
     ExportService,
+    TeamService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: SessionGuard },
     { provide: APP_FILTER, useClass: ApiExceptionFilter },

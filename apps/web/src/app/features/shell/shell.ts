@@ -20,7 +20,13 @@ import { BrandMark } from '../../shared/ui/brand-mark';
       @if (auth.session(); as s) {
         <div class="who">
           <span>{{ s.user.name }}</span>
-          <span class="faint">{{ s.organization.name }}</span>
+          @if (s.organizations.length > 1) {
+            <select class="switcher" (change)="switchTo($any($event.target).value)" aria-label="Company">
+              @for (o of s.organizations; track o.id) { <option [value]="o.id" [selected]="o.id === s.organization.id">{{ o.name }}</option> }
+            </select>
+          } @else {
+            <span class="faint">{{ s.organization.name }}</span>
+          }
         </div>
       }
       <button class="btn btn-sm btn-ghost" type="button" (click)="auth.signOut()">Sign out</button>
@@ -52,6 +58,8 @@ import { BrandMark } from '../../shared/ui/brand-mark';
     .spacer { flex: 1; }
     .who { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.2; font-size: 13px; }
     .who .faint { font-size: 11px; }
+    .switcher { margin-top: 1px; max-width: 200px; padding: 1px 4px; border: 1px solid var(--border); border-radius: 4px;
+                background: var(--bg-input); color: var(--text-muted); font: 11px var(--font); }
     main { flex: 1; }
     .billing-banner { display: flex; gap: 12px; align-items: center; justify-content: center; flex-wrap: wrap;
                       padding: 8px 16px; font-size: 13px; border-bottom: 1px solid var(--border); text-align: center; }
@@ -69,4 +77,8 @@ export class Shell {
     return billing ? summaryBanner(billing) : null;
   });
   protected readonly canManage = computed(() => this.auth.session()?.organization.role !== 'MEMBER');
+
+  protected switchTo(organizationId: string): void {
+    void this.auth.switchOrganization(organizationId);
+  }
 }

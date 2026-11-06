@@ -9,6 +9,8 @@ export interface BillingProvider {
   portalUrl(customerId: string, subscriptionId: string | null): Promise<string>;
   /** Verifies the signature and turns a webhook into a provider-neutral event. Throws `WebhookError` if invalid. */
   parseWebhook(rawBody: Buffer, headers: Record<string, string | string[] | undefined>): ProviderEvent;
+  /** Changes the number of seats on a subscription (prorated). The provider confirms with a webhook. */
+  updateSeats(subscriptionId: string, interval: BillingInterval, seats: number): Promise<void>;
 }
 
 export interface CheckoutRequest {

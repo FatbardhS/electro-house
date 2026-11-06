@@ -15,6 +15,12 @@ export const routes: Routes = [
     loadComponent: () => import('./features/auth/sign-up.page').then((m) => m.SignUpPage),
   },
   {
+    // Invitation link: works signed in or signed out, so no guard.
+    path: 'invite/:token',
+    title: 'Invitation · Electro House',
+    loadComponent: () => import('./features/auth/invitation.page').then((m) => m.InvitationPage),
+  },
+  {
     // Full-screen editor, outside the app shell.
     path: 'projects/:projectId/floors/:floorId',
     canActivate: [authGuard],

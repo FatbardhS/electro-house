@@ -831,3 +831,140 @@ describe('validation checks and DXF export', () => {
     await agent.get(`/api/projects/${project.id}/dxf?floorId=not-a-uuid`).expect(400);
   });
 });
+
+describe('team: invitations, roles, companies', () => {
+  const tokenOf = (link: string) => link.split('/invite/')[1]!;
+  async function invite(agent: ReturnType<typeof request.agent>, email: string, role: 'ADMIN' | 'MEMBER' = 'MEMBER') {
+    return (await agent.post('/api/team/invitations').send({ email, role }).expect(201)).body as shared.CreatedInvitationDto;
+  }
+
+  it('invites a new person who signs up from the link and lands in the company', async () => {
+    const owner = await signUp('Team Co');
+    const client = (await owner.agent.post('/api/clients').send({ name: 'Shared client' }).expect(201)).body;
+    const email = `new-${randomUUID()}@example.com`;
+    const { link, invitation } = await invite(owner.agent, email, 'MEMBER');
+    expect(link).toMatch(/\/invite\/[A-Za-z0-9_-]{43}$/);
+    expect(invitation).toMatchObject({ email, role: 'MEMBER', invitedBy: 'Test Electrician' });
+
+    const anon = request.agent(app.getHttpServer());
+    const preview = (await anon.get(`/api/invitations/${tokenOf(link)}`).expect(200)).body;
+    expect(preview).toMatchObject({ status: 'valid', organizationName: 'Team Co', role: 'MEMBER', email, accountExists: false });
+
+    await anon.post(`/api/invitations/${tokenOf(link)}/sign-up`).send({ name: 'New Electrician', password: 'short' }).expect(400);
+    const session = (await anon.post(`/api/invitations/${tokenOf(link)}/sign-up`).send({ name: 'New Electrician', password: 'correct horse battery' }).expect(201)).body;
+    expect(session.organization).toMatchObject({ name: 'Team Co', role: 'MEMBER' });
+    // shares the company's data
+    expect((await anon.get('/api/clients').expect(200)).body.map((c: { id: string }) => c.id)).toContain(client.id);
+    // members cannot manage the team or prices
+    await anon.post('/api/team/invitations').send({ email: 'x@example.com', role: 'MEMBER' }).expect(403);
+    await anon.post('/api/materials').send({ code: null, name: 'X', unit: 'pcs', unitPrice: 1, packSize: null, category: null, archived: false }).expect(403);
+    const team = (await anon.get('/api/team').expect(200)).body;
+    expect(team.members).toHaveLength(2);
+    expect(team.invitations).toEqual([]); // hidden from members
+
+    // the link works once
+    expect((await anon.get(`/api/invitations/${tokenOf(link)}`)).body.status).toBe('used');
+    await request(app.getHttpServer()).post(`/api/invitations/${tokenOf(link)}/sign-up`).send({ name: 'X', password: 'correct horse battery' }).expect(410);
+  });
+
+  it('lets an existing user join only with their own email and switch between companies', async () => {
+    const owner = await signUp('Join Co');
+    const other = await signUp('Own Co');
+    const wrong = await signUp('Someone Else Co');
+
+    const { link } = await invite(owner.agent, other.email.toUpperCase(), 'ADMIN');
+    expect((await request(app.getHttpServer()).get(`/api/invitations/${tokenOf(link)}`)).body.accountExists).toBe(true);
+    await wrong.agent.post(`/api/invitations/${tokenOf(link)}/accept`).expect(403);
+    await request(app.getHttpServer()).post(`/api/invitations/${tokenOf(link)}/sign-up`).send({ name: 'X', password: 'correct horse battery' }).expect(409);
+
+    const joined = (await other.agent.post(`/api/invitations/${tokenOf(link)}/accept`).expect(200)).body as shared.SessionDto;
+    expect(joined.organization).toMatchObject({ name: 'Join Co', role: 'ADMIN' });
+    expect(joined.organizations.map((o) => o.name)).toEqual(['Join Co', 'Own Co']);
+
+    const own = joined.organizations.find((o) => o.name === 'Own Co')!;
+    expect((await other.agent.post('/api/auth/switch').send({ organizationId: own.id }).expect(200)).body.organization.name).toBe('Own Co');
+    const foreign = (await wrong.agent.get('/api/auth/me')).body.organization.id;
+    await other.agent.post('/api/auth/switch').send({ organizationId: foreign }).expect(403);
+
+    // sign-in opens the company used last
+    const again = await request(app.getHttpServer()).post('/api/auth/sign-in').send({ email: other.email, password: 'correct horse battery' }).expect(200);
+    expect(again.body.organization.name).toBe('Own Co');
+  });
+
+  it('enforces role rules, ownership transfer, removal and leaving', async () => {
+    const owner = await signUp('Roles Co');
+    const adminEmail = `admin-${randomUUID()}@example.com`;
+    const memberEmail = `member-${randomUUID()}@example.com`;
+    const admin = request.agent(app.getHttpServer());
+    const member = request.agent(app.getHttpServer());
+    const adminLink = (await invite(owner.agent, adminEmail, 'ADMIN')).link;
+    const memberLink = (await invite(owner.agent, memberEmail, 'MEMBER')).link;
+    await admin.post(`/api/invitations/${tokenOf(adminLink)}/sign-up`).send({ name: 'Admin', password: 'correct horse battery' }).expect(201);
+    await member.post(`/api/invitations/${tokenOf(memberLink)}/sign-up`).send({ name: 'Member', password: 'correct horse battery' }).expect(201);
+    const members = (await owner.agent.get('/api/team')).body.members as shared.MemberDto[];
+    const ids = Object.fromEntries(members.map((m) => [m.name, m.userId]));
+    const ownerId = (await owner.agent.get('/api/auth/me')).body.user.id;
+
+    await admin.patch(`/api/team/members/${ownerId}`).send({ role: 'MEMBER' }).expect(403); // nobody manages the owner
+    await admin.delete(`/api/team/members/${ownerId}`).expect(403);
+    await member.delete(`/api/team/members/${ids['Admin']}`).expect(403);
+    await admin.patch(`/api/team/members/${ids['Member']}`).send({ role: 'ADMIN' }).expect(204);
+    await admin.patch(`/api/team/members/${ids['Admin']}`).send({ role: 'MEMBER' }).expect(400); // not yourself
+    await owner.agent.patch(`/api/team/members/${ids['Member']}`).send({ role: 'OWNER' }).expect(400);
+
+    await admin.post('/api/team/transfer-ownership').send({ userId: ids['Admin'] }).expect(403);
+    await owner.agent.post('/api/team/transfer-ownership').send({ userId: ids['Admin'] }).expect(204);
+    expect((await admin.get('/api/auth/me')).body.organization.role).toBe('OWNER');
+    expect((await owner.agent.get('/api/auth/me')).body.organization.role).toBe('ADMIN');
+    await admin.post('/api/team/leave').expect(400); // the owner cannot leave
+
+    // removing ends the member's session for this company at once
+    await admin.delete(`/api/team/members/${ids['Member']}`).expect(200);
+    await member.get('/api/clients').expect(401);
+    const signIn = await request(app.getHttpServer()).post('/api/auth/sign-in').send({ email: memberEmail, password: 'correct horse battery' }).expect(403);
+    expect(signIn.body.message).toMatch(/no longer belongs to any company/);
+
+    await owner.agent.post('/api/team/leave').expect(204);
+    await owner.agent.get('/api/clients').expect(401);
+    expect(((await admin.get('/api/team')).body.members as unknown[]).length).toBe(1);
+  });
+
+  it('replaces and revokes invitations, keeps them private, and refuses invites while read-only', async () => {
+    const owner = await signUp('Invites Co');
+    const email = `x-${randomUUID()}@example.com`;
+    const first = await invite(owner.agent, email);
+    const second = await invite(owner.agent, email);
+    expect((await request(app.getHttpServer()).get(`/api/invitations/${tokenOf(first.link)}`)).body.status).toBe('revoked');
+    const team = (await owner.agent.get('/api/team')).body as shared.TeamDto;
+    expect(team.invitations.map((i) => i.id)).toEqual([second.invitation.id]);
+
+    const stranger = await signUp('Stranger Co');
+    await stranger.agent.delete(`/api/team/invitations/${second.invitation.id}`).expect(404);
+    await owner.agent.delete(`/api/team/invitations/${second.invitation.id}`).expect(204);
+    expect((await request(app.getHttpServer()).get(`/api/invitations/${tokenOf(second.link)}`)).body.status).toBe('revoked');
+    await request(app.getHttpServer()).get('/api/invitations/not-a-token').expect(400);
+    await request(app.getHttpServer()).get(`/api/invitations/${'a'.repeat(43)}`).expect(404);
+    const me = (await owner.agent.get('/api/auth/me')).body;
+    await owner.agent.post('/api/team/invitations').send({ email: me.user.email, role: 'MEMBER' }).expect(409);
+
+    const { PrismaService } = await import('../src/prisma/prisma.service.js');
+    await app.get(PrismaService).organization.update({ where: { id: me.organization.id }, data: { trialEndsAt: new Date(Date.now() - 1000) } });
+    await owner.agent.post('/api/team/invitations').send({ email: `y-${randomUUID()}@example.com`, role: 'MEMBER' }).expect(402);
+  });
+
+  it('keeps subscription seats equal to the number of members', async () => {
+    const owner = await signUp('Seats Co');
+    const { url } = (await owner.agent.post('/api/billing/checkout').send({ interval: 'month' }).expect(200)).body;
+    await owner.agent.post('/api/billing/dev/complete').send({ token: new URL(url).searchParams.get('dev-checkout') }).expect(200);
+    expect((await owner.agent.get('/api/billing')).body.seats).toBe(1);
+
+    const guest = request.agent(app.getHttpServer());
+    const { link } = await invite(owner.agent, `seat-${randomUUID()}@example.com`);
+    await guest.post(`/api/invitations/${tokenOf(link)}/sign-up`).send({ name: 'Seat Two', password: 'correct horse battery' }).expect(201);
+    expect((await owner.agent.get('/api/billing')).body).toMatchObject({ seats: 2, members: 2 });
+
+    const guestId = (await guest.get('/api/auth/me')).body.user.id;
+    expect((await owner.agent.delete(`/api/team/members/${guestId}`).expect(200)).body).toEqual({ seatsError: null });
+    expect((await owner.agent.get('/api/billing')).body).toMatchObject({ seats: 1, members: 1 });
+  });
+});

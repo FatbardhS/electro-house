@@ -9,13 +9,14 @@ import { CompanySettings } from './company-settings';
 import { MaterialRules } from './material-rules';
 import { PriceList } from './price-list';
 import { BillingPanel } from './billing-panel';
+import { TeamPanel } from './team-panel';
 
-type Tab = 'company' | 'prices' | 'rules' | 'billing';
+type Tab = 'company' | 'prices' | 'rules' | 'team' | 'billing';
 
 /** Company-wide settings: prices and costs, price list, material rules. */
 @Component({
   selector: 'app-settings-page',
-  imports: [LoadingState, ErrorState, CompanySettings, PriceList, MaterialRules, BillingPanel],
+  imports: [LoadingState, ErrorState, CompanySettings, PriceList, MaterialRules, BillingPanel, TeamPanel],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="page wide">
@@ -31,7 +32,9 @@ type Tab = 'company' | 'prices' | 'rules' | 'billing';
         }
       </div>
 
-      @if (current() === 'billing') {
+      @if (current() === 'team') {
+        <app-team-panel />
+      } @else if (current() === 'billing') {
         <app-billing-panel [devCheckout]="devCheckout()" [devPortal]="devPortal()" />
       } @else if (settings.error() || materials.error() || rules.error(); as err) {
         <app-error-state [message]="message(err)" (retry)="reloadAll()" />
@@ -72,10 +75,11 @@ export class SettingsPage {
     { id: 'company', label: 'Prices & costs' },
     { id: 'prices', label: 'Price list' },
     { id: 'rules', label: 'Material rules' },
+    { id: 'team', label: 'Team' },
     { id: 'billing', label: 'Billing' },
   ];
   protected readonly current = computed<Tab>(() =>
-    ['company', 'prices', 'rules', 'billing'].includes(this.tab() ?? '') ? (this.tab() as Tab) : 'company',
+    ['company', 'prices', 'rules', 'team', 'billing'].includes(this.tab() ?? '') ? (this.tab() as Tab) : 'company',
   );
   /** Members cannot change company settings; nobody can while the subscription is inactive. */
   protected readonly readonly = computed(() => {

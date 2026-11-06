@@ -63,6 +63,14 @@ export class DevBillingProvider implements BillingProvider {
     };
   }
 
+  /** The confirmation arrives as a webhook (see `seatsEvent`), like with the real provider. */
+  async updateSeats(): Promise<void> {}
+
+  /** Signed "subscription updated" webhook with a new seat count. */
+  seatsEvent(current: ProviderSubscription, seats: number): { body: Buffer; headers: Record<string, string> } {
+    return this.event('subscription.updated', { ...current, seats });
+  }
+
   /** Turns a dev checkout token into a signed "subscription activated" webhook. */
   checkoutCompletedEvent(token: string): { body: Buffer; headers: Record<string, string> } {
     const t = this.verify(token) as { org: string; interval: BillingInterval; seats: number; exp: number } | null;
