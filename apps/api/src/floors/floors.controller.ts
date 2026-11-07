@@ -32,6 +32,7 @@ import { ZodPipe } from '../common/zod-validation.pipe.js';
 import type { UploadedPdf } from '../files/plan-files.service.js';
 import { FloorsService } from './floors.service.js';
 import { StorageService } from '../storage/storage.service.js';
+import { TrackActivity } from '../activity/track-activity.js';
 
 @Controller()
 export class FloorsController {
@@ -40,6 +41,7 @@ export class FloorsController {
     private readonly storage: StorageService,
   ) {}
 
+  @TrackActivity('floor.created', { target: { type: 'floor' } })
   @Post('projects/:projectId/floors')
   create(
     @Auth() auth: AuthContext,
@@ -81,6 +83,7 @@ export class FloorsController {
     return this.floors.updateSettings(auth.organizationId, id, body);
   }
 
+  @TrackActivity('plan.uploaded', { target: { type: 'floor', param: 'id' } })
   @Put('floors/:id/plan')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_PLAN_FILE_BYTES, files: 1 } }))
   uploadPlan(
@@ -117,6 +120,7 @@ export class FloorsController {
     body.pipe(res);
   }
 
+  @TrackActivity('floor.deleted', { target: { type: 'floor', param: 'id' } })
   @Delete('floors/:id')
   @HttpCode(204)
   remove(@Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string): Promise<void> {

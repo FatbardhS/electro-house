@@ -12,6 +12,9 @@ import * as shared from '@electro/shared';
 
 // Runs against the database configured in apps/api/.env. Each run uses fresh, unique accounts.
 if (existsSync('.env')) process.loadEnvFile('.env');
+// The product owner account used by the admin panel tests (read once, when the app starts).
+const ADMIN_EMAIL = 'owner-' + randomUUID() + '@example.com';
+process.env['PLATFORM_ADMIN_EMAILS'] = ADMIN_EMAIL;
 
 let app: INestApplication<App>;
 
@@ -1011,5 +1014,79 @@ describe('team: invitations, roles, companies', () => {
     const guestId = (await guest.get('/api/auth/me')).body.user.id;
     expect((await owner.agent.delete(`/api/team/members/${guestId}`).expect(200)).body).toEqual({ seatsError: null });
     expect((await owner.agent.get('/api/billing')).body).toMatchObject({ seats: 1, members: 1 });
+  });
+});
+
+describe('product owner panel', () => {
+  async function signUpAs(email: string, company: string) {
+    const agent = request.agent(app.getHttpServer());
+    await agent.post('/api/auth/sign-up').send({ name: 'Product Owner', email, password: 'correct horse battery', organizationName: company }).expect(201);
+    return agent;
+  }
+
+  it('is hidden (404) from normal users and logs the attempt', async () => {
+    const { agent, email } = await signUp('Curious Co');
+    expect((await agent.get('/api/auth/me')).body.user.isPlatformAdmin).toBe(false);
+    await agent.get('/api/admin/overview').expect(404);
+    await agent.get('/api/admin/users').expect(404);
+    await request(app.getHttpServer()).get('/api/admin/overview').expect(401);
+
+    const owner = await signUpAs(ADMIN_EMAIL, 'Platform HQ');
+    expect((await owner.get('/api/auth/me')).body.user.isPlatformAdmin).toBe(true);
+    const page = (await owner.get('/api/admin/activity').query({ action: 'admin.denied', search: email }).expect(200)).body;
+    expect(page.events.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('records sign-ins, failed sign-ins and work, and shows them to the owner', async () => {
+    const owner = request.agent(app.getHttpServer());
+    await owner.post('/api/auth/sign-in').send({ email: ADMIN_EMAIL, password: 'correct horse battery' }).expect(200);
+
+    const { agent, email } = await signUp('Watched Co');
+    await request(app.getHttpServer()).post('/api/auth/sign-in').send({ email, password: 'wrong password!!' }).expect(401);
+    await agent.post('/api/auth/sign-in').send({ email, password: 'correct horse battery' }).expect(200);
+    const client = (await agent.post('/api/clients').send({ name: 'Arben Hoxha' }).expect(201)).body as ClientDto;
+    const project = (await agent.post('/api/projects').send({ clientId: client.id, name: 'Shtëpia e re' }).expect(201)).body as ProjectDto;
+    await agent.delete(`/api/projects/${project.id}`).expect(204);
+
+    // Recording happens just after the response: give it a moment.
+    await new Promise((r) => setTimeout(r, 300));
+    const me = (await agent.get('/api/auth/me')).body;
+    const { events } = (await owner.get('/api/admin/activity').query({ userId: me.user.id }).expect(200)).body as shared.ActivityPageDto;
+    const actions = events.map((e) => e.action);
+    expect(actions).toEqual(expect.arrayContaining(['auth.sign_up', 'auth.sign_in', 'client.created', 'project.created', 'project.deleted']));
+    const deleted = events.find((e) => e.action === 'project.deleted')!;
+    expect(deleted).toMatchObject({ targetType: 'project', targetId: project.id, targetName: 'Shtëpia e re', organizationName: 'Watched Co', email, userName: 'Test Electrician' });
+    expect(deleted.ip).toBeTruthy();
+
+    const failed = (await owner.get('/api/admin/activity').query({ action: 'auth.sign_in_failed', search: email }).expect(200)).body.events;
+    expect(failed).toHaveLength(1);
+    expect(failed[0]).toMatchObject({ email, userId: null });
+
+    const users = (await owner.get('/api/admin/users').query({ search: email }).expect(200)).body as shared.AdminUserDto[];
+    expect(users).toHaveLength(1);
+    expect(users[0]).toMatchObject({ email, openSessions: 2, memberships: [{ organizationName: 'Watched Co', role: 'OWNER' }] });
+    expect(users[0]!.lastSeenAt).toBeTruthy();
+    expect(users[0]!.lastSignInAt).toBeTruthy();
+
+    const detail = (await owner.get(`/api/admin/users/${me.user.id}`).expect(200)).body as shared.AdminUserDetailDto;
+    expect(detail.sessions).toHaveLength(2);
+    expect(detail.actionCounts['project.created']).toBe(1);
+
+    const companies = (await owner.get('/api/admin/companies').query({ search: 'Watched Co' }).expect(200)).body as shared.AdminCompanyDto[];
+    expect(companies[0]).toMatchObject({ name: 'Watched Co', members: 1, projects: 0, clients: 1, owner: { email } });
+    expect(companies[0]!.lastActivityAt).toBeTruthy();
+
+    const overview = (await owner.get('/api/admin/overview').expect(200)).body as shared.AdminOverviewDto;
+    expect(overview.totals.users).toBeGreaterThan(1);
+    expect(overview.days).toHaveLength(30);
+    expect(overview.days.at(-1)!.signIns).toBeGreaterThan(0);
+    expect(overview.failedSignIns24h).toBeGreaterThan(0);
+
+    // Paging: older events through the cursor.
+    const first = (await owner.get('/api/admin/activity').query({ limit: 2 }).expect(200)).body as shared.ActivityPageDto;
+    expect(first.events).toHaveLength(2);
+    const older = (await owner.get('/api/admin/activity').query({ limit: 2, before: first.nextCursor }).expect(200)).body as shared.ActivityPageDto;
+    expect(older.events[0]!.createdAt < first.events[1]!.createdAt).toBe(true);
+    await owner.get('/api/admin/activity').query({ action: 'nonsense' }).expect(400);
   });
 });

@@ -11,6 +11,8 @@ export interface UserDto {
   name: string;
   /** Interface language chosen by the user. */
   language: 'sq' | 'en';
+  /** Product owner: may open the admin panel (/admin). */
+  isPlatformAdmin: boolean;
 }
 
 export interface OrganizationDto {

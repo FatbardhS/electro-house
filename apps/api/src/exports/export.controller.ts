@@ -6,6 +6,7 @@ import { AllowReadOnly, Auth, type AuthContext } from '../auth/auth-context.js';
 import { ZodPipe } from '../common/zod-validation.pipe.js';
 import { ExportService } from './export.service.js';
 import { withExportLanguage } from './export-lang.js';
+import { TrackActivity } from '../activity/track-activity.js';
 
 const dxfQuery = z.object({ floorId: z.uuid().optional() });
 
@@ -14,6 +15,7 @@ export class ExportController {
   constructor(private readonly exports: ExportService) {}
 
   /** DXF of one floor (`?floorId=`), or a ZIP with one DXF per floor. */
+  @TrackActivity('export.dxf', { target: { type: 'project', param: 'id' } })
   @Get('projects/:id/dxf')
   async dxf(
     @Auth() auth: AuthContext,
@@ -30,6 +32,7 @@ export class ExportController {
   }
 
   /** Generates the project PDF and sends it as a download. */
+  @TrackActivity('export.pdf', { target: { type: 'project', param: 'id' } })
   @Post('projects/:id/exports')
   @AllowReadOnly()
   @HttpCode(200)

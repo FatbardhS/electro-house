@@ -17,6 +17,19 @@ export const authGuard: CanActivateFn = async (_route, state) => {
   }
 };
 
+/** The product owner panel: only for accounts the server marks as platform admin. */
+export const platformAdminGuard: CanActivateFn = async () => {
+  const auth = inject(AuthService);
+  const router = inject(Router);
+  try {
+    const session = await auth.ensureLoaded();
+    if (!session) return router.createUrlTree(['/sign-in'], { queryParams: { next: '/admin' } });
+    return session.user.isPlatformAdmin ? true : router.createUrlTree(['/clients']);
+  } catch {
+    return router.createUrlTree(['/clients']);
+  }
+};
+
 /** Matches only for visitors who are not signed in (the landing page at "/"). */
 export const visitorMatch: CanMatchFn = async () => {
   const auth = inject(AuthService);

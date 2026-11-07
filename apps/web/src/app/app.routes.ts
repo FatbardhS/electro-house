@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { authGuard, guestGuard, visitorMatch } from './core/guards';
+import { authGuard, guestGuard, platformAdminGuard, visitorMatch } from './core/guards';
 
 export const routes: Routes = [
   {
@@ -76,6 +76,13 @@ export const routes: Routes = [
         path: 'settings',
         title: 'Settings',
         loadComponent: () => import('./features/settings/settings.page').then((m) => m.SettingsPage),
+      },
+      {
+        // Product owner panel (accounts in the API's PLATFORM_ADMIN_EMAILS). The API refuses everyone else too.
+        path: 'admin',
+        canActivate: [platformAdminGuard],
+        title: 'Admin panel',
+        loadComponent: () => import('./features/admin/admin.page').then((m) => m.AdminPage),
       },
     ],
   },

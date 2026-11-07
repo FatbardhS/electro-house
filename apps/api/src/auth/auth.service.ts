@@ -7,6 +7,9 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { env } from '../config/env.js';
 import type { AuthContext } from './auth-context.js';
 
+/** Product owner accounts (PLATFORM_ADMIN_EMAILS) may open the admin panel. */
+export const isPlatformAdmin = (email: string) => env().PLATFORM_ADMIN_EMAILS.includes(email.toLowerCase());
+
 export const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
 
 // A valid hash of a random password, so sign-in for an unknown email costs the same time as a wrong password.
@@ -106,7 +109,7 @@ export class AuthService {
     const token = randomBytes(32).toString('base64url');
     const expiresAt = new Date(Date.now() + env().SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
     await this.prisma.session.create({ data: { tokenHash: hashToken(token), userId, organizationId, expiresAt } });
-    await this.prisma.user.update({ where: { id: userId }, data: { lastOrganizationId: organizationId } });
+    await this.prisma.user.update({ where: { id: userId }, data: { lastOrganizationId: organizationId, lastSeenAt: new Date() } });
     return { token, expiresAt, session: await this.sessionDto(userId, organizationId) };
   }
 
@@ -122,7 +125,7 @@ export class AuthService {
     const active = user.memberships.find((m) => m.organizationId === organizationId);
     if (!active) throw new ForbiddenException('You are not a member of that company.');
     return {
-      user: { id: user.id, email: user.email, name: user.name, language: user.language === 'en' ? 'en' : 'sq' },
+      user: { id: user.id, email: user.email, name: user.name, language: user.language === 'en' ? 'en' : 'sq', isPlatformAdmin: isPlatformAdmin(user.email) },
       organization: {
         id: active.organization.id,
         name: active.organization.name,

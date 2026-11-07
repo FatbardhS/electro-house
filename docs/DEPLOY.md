@@ -17,6 +17,19 @@ copy**, no credit card. Billing is switched off: every company has full access.
 
 Every push to `main` deploys again automatically; database migrations run on start.
 
+## Admin panel (product owner)
+
+The panel at **/admin** shows every account, company and action (sign-ins, failed sign-ins, projects, uploads,
+exports, team changes) with time, IP address and device. Only the emails in `PLATFORM_ADMIN_EMAILS` can open it;
+for everyone else it does not exist (404).
+
+1. Render → web service **electro-house** → **Environment** → add `PLATFORM_ADMIN_EMAILS` with your account's
+   email (several: separate with commas) → **Save changes** (the service restarts).
+2. Sign in with that account: an **Admin** link appears in the top menu.
+
+Activity is recorded from the moment this version is live; earlier actions are not in the log (accounts,
+companies and projects created before are listed). See docs/PHASE-9.md.
+
 ## Free-tier limits
 
 - **The app sleeps** after ~15 minutes without visitors; the next visit takes about a minute.

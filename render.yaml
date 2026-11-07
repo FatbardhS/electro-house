@@ -36,3 +36,6 @@ services:
         value: database
       - key: BILLING_PROVIDER
         value: none
+      # Your email (the product owner): opens the admin panel at /admin. Filled in on the Render dashboard.
+      - key: PLATFORM_ADMIN_EMAILS
+        sync: false

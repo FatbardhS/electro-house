@@ -52,6 +52,8 @@ model User {
   lastOrganizationId String? @db.Uuid
   /// Interface language: "sq" (Albanian, default) or "en".
   language     String       @default("sq")
+  /// Last time the user made a request (updated at most every few minutes). For the product owner panel.
+  lastSeenAt   DateTime?
   createdAt    DateTime     @default(now())
   memberships  Membership[]
   sessions     Session[]
@@ -391,4 +393,32 @@ model Invitation {
 
   @@index([organizationId])
   @@index([email])
+}
+
+// ── Product owner panel ──────────────────────────────────────
+
+/// One thing that happened in the app (sign-in, project created, export…), for the product owner's admin panel.
+/// No foreign keys on purpose: the history stays when a user, company or project is deleted (names are copied in).
+model ActivityEvent {
+  id               String   @id @default(uuid()) @db.Uuid
+  createdAt        DateTime @default(now())
+  /// e.g. "auth.sign_in", "project.created", "export.pdf". See packages/shared/src/admin.
+  action           String
+  userId           String?  @db.Uuid
+  /// The email at the time (also set for failed sign-ins, where there may be no user).
+  email            String?
+  organizationId   String?  @db.Uuid
+  organizationName String?
+  /// What the action was about, e.g. "project" + its id and name.
+  targetType       String?
+  targetId         String?
+  targetName       String?
+  ip               String?
+  userAgent        String?
+  details          Json?
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([organizationId, createdAt])
+  @@index([action, createdAt])
 }

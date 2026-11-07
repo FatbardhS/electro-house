@@ -6,6 +6,7 @@ import { ZodPipe } from '../common/zod-validation.pipe.js';
 import { setSessionCookie } from './session-cookie.js';
 import { AuthService } from './auth.service.js';
 import { AllowReadOnly, Auth, Public, SESSION_COOKIE, type AuthContext } from './auth-context.js';
+import { TrackActivity } from '../activity/track-activity.js';
 
 @Controller('auth')
 export class AuthController {
@@ -13,6 +14,7 @@ export class AuthController {
 
   @Public()
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @TrackActivity('auth.sign_up')
   @Post('sign-up')
   async signUp(
     @Body(new ZodPipe(signUpSchema)) body: SignUpInput,
@@ -25,6 +27,7 @@ export class AuthController {
 
   @Public()
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @TrackActivity('auth.sign_in')
   @Post('sign-in')
   @HttpCode(200)
   async signIn(
@@ -36,6 +39,7 @@ export class AuthController {
     return session;
   }
 
+  @TrackActivity('auth.sign_out')
   @Post('sign-out')
   @AllowReadOnly()
   @HttpCode(204)

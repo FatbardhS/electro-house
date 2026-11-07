@@ -32,6 +32,11 @@ const envSchema = z.object({
   /** Paddle price ids (pri_…) of the per-user monthly and yearly prices. */
   PADDLE_PRICE_MONTHLY: z.string().startsWith('pri_').optional(),
   PADDLE_PRICE_YEARLY: z.string().startsWith('pri_').optional(),
+  /** Product owner accounts that may open the admin panel (/admin): comma-separated emails. Empty = nobody. */
+  PLATFORM_ADMIN_EMAILS: z
+    .string()
+    .default('')
+    .transform((v) => v.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean)),
 })
   .superRefine((e, ctx) => {
     if (e.STORAGE_DRIVER === 's3') {

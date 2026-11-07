@@ -20,6 +20,7 @@ import { AuthService } from '../auth/auth.service.js';
 import { ZodPipe } from '../common/zod-validation.pipe.js';
 import { setSessionCookie } from '../auth/session-cookie.js';
 import { TeamService } from './team.service.js';
+import { TrackActivity } from '../activity/track-activity.js';
 
 const tokenParam = z.string().regex(INVITATION_TOKEN, 'This invitation link is not valid.');
 
@@ -33,6 +34,11 @@ export class TeamController {
   }
 
   /** Refused with 402 while the subscription is inactive (like every change). */
+  @TrackActivity('team.invited', {
+    target: { type: 'invitation' },
+    fromResult: (r) => ({ id: (r as CreatedInvitationDto).invitation.id, name: (r as CreatedInvitationDto).invitation.email }),
+    details: (req) => ({ role: (req.body as { role?: unknown }).role }),
+  })
   @Post('invitations')
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
   invite(@Auth() auth: AuthContext, @Body(new ZodPipe(inviteSchema)) body: InviteInput): Promise<CreatedInvitationDto> {
@@ -45,6 +51,7 @@ export class TeamController {
     return this.team.revoke(auth, id);
   }
 
+  @TrackActivity('team.role_changed', { target: { type: 'user', param: 'userId' }, details: (req) => ({ role: (req.body as { role?: unknown }).role }) })
   @Patch('members/:userId')
   @HttpCode(204)
   changeRole(
@@ -56,12 +63,14 @@ export class TeamController {
   }
 
   /** Removing people stays possible while read-only (it lowers the bill). */
+  @TrackActivity('team.member_removed', { target: { type: 'user', param: 'userId' } })
   @Delete('members/:userId')
   @AllowReadOnly()
   remove(@Auth() auth: AuthContext, @Param('userId', ParseUUIDPipe) userId: string): Promise<{ seatsError: string | null }> {
     return this.team.remove(auth, userId);
   }
 
+  @TrackActivity('team.left')
   @Post('leave')
   @AllowReadOnly()
   @HttpCode(204)
@@ -70,6 +79,7 @@ export class TeamController {
     res.clearCookie(SESSION_COOKIE, { path: '/' });
   }
 
+  @TrackActivity('team.ownership_transferred', { details: (req) => ({ toUserId: (req.body as { userId?: unknown }).userId }) })
   @Post('transfer-ownership')
   @HttpCode(204)
   transfer(@Auth() auth: AuthContext, @Body(new ZodPipe(transferOwnershipSchema)) body: { userId: string }): Promise<void> {
@@ -93,6 +103,7 @@ export class InvitationsController {
   }
 
   /** Joining is allowed even when the user's current company is read-only. */
+  @TrackActivity('invitation.accepted')
   @Post(':token/accept')
   @AllowReadOnly()
   @HttpCode(200)
@@ -101,6 +112,7 @@ export class InvitationsController {
     return this.auth.switchOrganization(auth, organizationId);
   }
 
+  @TrackActivity('invitation.sign_up')
   @Post(':token/sign-up')
   @Public()
   @Throttle({ default: { limit: 5, ttl: 60_000 } })

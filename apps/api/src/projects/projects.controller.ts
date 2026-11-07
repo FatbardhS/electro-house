@@ -11,6 +11,7 @@ import {
 import { Auth, type AuthContext } from '../auth/auth-context.js';
 import { ZodPipe } from '../common/zod-validation.pipe.js';
 import { ProjectsService } from './projects.service.js';
+import { TrackActivity } from '../activity/track-activity.js';
 
 const listProjectsQuery = z.object({
   clientId: z.uuid().optional(),
@@ -34,6 +35,7 @@ export class ProjectsController {
     return this.projects.get(auth.organizationId, id);
   }
 
+  @TrackActivity('project.created', { target: { type: 'project' } })
   @Post()
   create(
     @Auth() auth: AuthContext,
@@ -51,6 +53,7 @@ export class ProjectsController {
     return this.projects.update(auth.organizationId, id, body);
   }
 
+  @TrackActivity('project.deleted', { target: { type: 'project', param: 'id' } })
   @Delete(':id')
   @HttpCode(204)
   remove(@Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string): Promise<void> {

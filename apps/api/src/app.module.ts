@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from './prisma/prisma.service.js';
 import { StorageModule } from './storage/storage.service.js';
@@ -26,6 +26,10 @@ import { BillingModule } from './billing/billing.module.js';
 import { InvitationsController, TeamController } from './team/team.controller.js';
 import { TeamService } from './team/team.service.js';
 import { HealthController } from './health.controller.js';
+import { ActivityService } from './activity/activity.service.js';
+import { ActivityInterceptor } from './activity/activity.interceptor.js';
+import { AdminController, PlatformAdminGuard } from './admin/admin.controller.js';
+import { AdminService } from './admin/admin.service.js';
 
 @Module({
   imports: [
@@ -38,7 +42,7 @@ import { HealthController } from './health.controller.js';
       skipIf: () => process.env['NODE_ENV'] === 'test',
     }),
   ],
-  controllers: [HealthController, AuthController, ClientsController, ProjectsController, FloorsController, DrawingController, InstallationController, PricingController, ExportController, TeamController, InvitationsController],
+  controllers: [HealthController, AuthController, ClientsController, ProjectsController, FloorsController, DrawingController, InstallationController, PricingController, ExportController, TeamController, InvitationsController, AdminController],
   providers: [
     AuthService,
     ClientsService,
@@ -50,9 +54,13 @@ import { HealthController } from './health.controller.js';
     PricingService,
     ExportService,
     TeamService,
+    ActivityService,
+    AdminService,
+    PlatformAdminGuard,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: SessionGuard },
     { provide: APP_FILTER, useClass: ApiExceptionFilter },
+    { provide: APP_INTERCEPTOR, useClass: ActivityInterceptor },
   ],
 })
 export class AppModule {}

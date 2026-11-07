@@ -3,6 +3,7 @@ import { clientInputSchema, listQuerySchema, type ClientDto, type ClientInput } 
 import { Auth, type AuthContext } from '../auth/auth-context.js';
 import { ZodPipe } from '../common/zod-validation.pipe.js';
 import { ClientsService } from './clients.service.js';
+import { TrackActivity } from '../activity/track-activity.js';
 
 @Controller('clients')
 export class ClientsController {
@@ -18,6 +19,7 @@ export class ClientsController {
     return this.clients.get(auth.organizationId, id);
   }
 
+  @TrackActivity('client.created', { target: { type: 'client' } })
   @Post()
   create(@Auth() auth: AuthContext, @Body(new ZodPipe(clientInputSchema)) body: ClientInput): Promise<ClientDto> {
     return this.clients.create(auth.organizationId, body);
@@ -32,6 +34,7 @@ export class ClientsController {
     return this.clients.update(auth.organizationId, id, body);
   }
 
+  @TrackActivity('client.deleted', { target: { type: 'client', param: 'id' } })
   @Delete(':id')
   @HttpCode(204)
   remove(@Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string): Promise<void> {

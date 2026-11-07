@@ -18,6 +18,7 @@ import { LangSwitch } from '../../shared/ui/lang-switch';
         <a routerLink="/clients" routerLinkActive="active">{{ 'Clients' | t }}</a>
         <a routerLink="/projects" routerLinkActive="active">{{ 'Projects' | t }}</a>
         <a routerLink="/settings" routerLinkActive="active">{{ 'Settings' | t }}</a>
+        @if (auth.session()?.user?.isPlatformAdmin) { <a routerLink="/admin" routerLinkActive="active">{{ 'Admin' | t }}</a> }
       </nav>
       <div class="spacer"></div>
       @if (auth.session(); as s) {
@@ -71,7 +72,11 @@ import { LangSwitch } from '../../shared/ui/lang-switch';
     .billing-banner.info { background: var(--accent-soft); }
     .billing-banner.warn { background: var(--warn-soft); }
     .billing-banner.error { background: rgba(229, 72, 77, 0.14); }
-    @media (max-width: 640px) { .who { display: none; } .topbar { gap: 12px; padding: 0 12px; } }
+    @media (max-width: 640px) {
+      .who { display: none; } .topbar { gap: 12px; padding: 0 12px; }
+      /* The menu scrolls sideways instead of widening the page. */
+      nav { flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; } nav a { white-space: nowrap; } .spacer { display: none; }
+    }
   `,
 })
 export class Shell {
