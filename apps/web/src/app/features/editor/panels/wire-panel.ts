@@ -38,6 +38,9 @@ import { t } from '../../../core/i18n/i18n.service';
           <option value="" [selected]="!w.circuitId">— {{ 'not assigned' | t }} —</option>
           @for (k of drawing.circuits(); track k.id) { <option [value]="k.id" [selected]="k.id === w.circuitId">{{ k.number }} · {{ k.name }}</option> }
         </select></label>
+      <details class="adv" [open]="!simple()">
+      <summary>{{ 'Cable' | t }}: <span class="mono">{{ w.cable.cableType ?? '' }} {{ w.cable.conductors ?? '?' }}×{{ w.cable.crossSectionMm2 ?? '?' }} mm²</span>
+        @if (simple()) { <span class="faint">· {{ 'change' | t }}</span> }</summary>
       <div class="two">
         <label class="f"><span>{{ 'Cable type' | t }}</span>
           <select class="input" (change)="setCable({ cableType: $any(val($event)) || undefined })">
@@ -71,6 +74,7 @@ import { t } from '../../../core/i18n/i18n.service';
           </select>
         </div>
       </div>
+      </details>
       <div class="ends">
         <div class="end"><span class="faint">{{ 'From' | t }}</span> <span>{{ endName(w.from) }}</span>
           @if (w.from.componentId) { <button class="btn btn-sm btn-ghost" type="button" (click)="disconnect('from')">{{ 'Disconnect' | t }}</button> }</div>
@@ -99,12 +103,18 @@ import { t } from '../../../core/i18n/i18n.service';
     .end { display: flex; align-items: center; gap: 6px; }
     .end span:nth-child(2) { flex: 1; }
     .actions { display: flex; gap: 6px; }
+    .adv { display: flex; flex-direction: column; gap: 8px; }
+    .adv[open] { padding-bottom: 2px; }
+    .adv > summary { cursor: pointer; font-size: 12.5px; color: var(--text-muted); padding: 4px 0; }
+    .adv > * + * { margin-top: 8px; }
   `,
 })
 export class WirePanel {
   protected readonly drawing = inject(DrawingStore);
   private readonly tools = inject(ToolsStore);
   readonly calibration = input<Calibration | null>(null);
+  /** Guided editor: cable details folded away under a one-line summary. */
+  readonly simple = input(false);
 
   protected readonly cableTypes = CABLE_TYPES;
   protected readonly sections = CROSS_SECTIONS_MM2;

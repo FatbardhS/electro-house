@@ -53,6 +53,13 @@ import { DrawingStore } from './state/drawing.store';
 import { FloorSync, type SaveStatus } from './state/floor-sync';
 import { browserJournal } from './state/journal';
 import { ToolsStore, type ToolId } from './state/tools.store';
+import { GuideStore } from './state/guide.store';
+import { firstOpenStep, guideProgress } from './state/guide-progress';
+import { GuidePanel } from './guide/guide-panel';
+import { StepBar } from './guide/step-bar';
+import { HintCard } from './guide/hint-card';
+import { ProgressPanel } from './guide/progress-panel';
+import { Tour } from './guide/tour';
 import { ViewportStore } from './viewport/viewport.store';
 import { Workspace } from './workspace';
 import { I18n } from '../../core/i18n/i18n.service';
@@ -95,11 +102,16 @@ let clipboard: { components: ComponentDto[]; wires: WireDto[] } = { components: 
     CircuitsPanel,
     ChecksPanel,
     SymbolDefs,
+    GuidePanel,
+    StepBar,
+    HintCard,
+    ProgressPanel,
+    Tour,
     LoadingState,
     ErrorState,
     EmptyState,
   ],
-  providers: [ViewportStore, ToolsStore, DrawingStore],
+  providers: [ViewportStore, ToolsStore, DrawingStore, GuideStore],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './editor.page.html',
   styleUrl: './editor.page.css',
@@ -112,6 +124,7 @@ export class EditorPage {
   protected readonly viewport = inject(ViewportStore);
   protected readonly tools = inject(ToolsStore);
   protected readonly drawing = inject(DrawingStore);
+  protected readonly guide = inject(GuideStore);
   private readonly auth = inject(AuthService);
   private readonly workspace = viewChild<Workspace>('ws');
   /** Subscription inactive: the drawing can be viewed and exported but not changed. */
@@ -186,13 +199,61 @@ export class EditorPage {
     const live: InstallationDto = {
       ...inst,
       circuits: this.drawing.circuits().length ? this.drawing.circuits() : inst.circuits,
-      floors: inst.floors.map((f) => (f.floorId === floorId ? { ...f, components: this.drawing.components(), wires: this.drawing.wires() } : f)),
+      // This floor: the live drawing and the live scale (the project data may predate a calibration made here).
+      floors: inst.floors.map((f) => {
+        if (f.floorId !== floorId) return f;
+        const floor = this.floor();
+        return {
+          ...f,
+          components: this.drawing.components(),
+          wires: this.drawing.wires(),
+          ...(floor ? { metresPerUnit: floor.calibration?.metresPerUnit ?? null, calibrationNeedsCheck: floor.calibrationNeedsCheck } : {}),
+        };
+      }),
     };
     return applyIgnored(runChecks(live), inst.ignoredIssues);
   });
   protected readonly floorIssues = computed(() => (this.liveChecks()?.open ?? []).filter((i) => i.floorId === this.floorId() || i.floorId === null));
   protected readonly floorErrors = computed(() => this.floorIssues().filter((i) => i.severity === 'error').length);
   protected readonly ignoredCount = computed(() => this.liveChecks()?.summary.ignored ?? 0);
+
+  /** Guided editor: how far this floor is in each step. */
+  protected readonly progress = computed(() =>
+    guideProgress(this.drawing.components(), this.drawing.wires(), !!this.calibration(), this.floorIssues()),
+  );
+
+  /** On each floor, open the first step that is not done yet (once; then the user decides). */
+  private readonly chooseStep = effect(() => {
+    const floorId = this.floorId();
+    if (!this.session.hasValue() || this.guide.stepChosenFor === floorId) return;
+    const p = this.progress();
+    untracked(() => {
+      this.guide.stepChosenFor = floorId;
+      this.guide.step.set(firstOpenStep(p));
+      if (this.floor()?.planFile) this.guide.maybeStartTour();
+    });
+  });
+
+  /** Changing step picks the matching tool: connecting in the wires step, selecting elsewhere. */
+  private readonly stepTool = effect(() => {
+    const step = this.guide.step();
+    if (!this.guide.guided()) return;
+    untracked(() => this.tools.setTool(step === 'wires' && this.floor()?.planFile ? 'wire' : 'select'));
+  });
+
+  protected showUnconnected(): void {
+    this.focusIds(this.progress().unconnected.map((c) => c.id));
+  }
+
+  protected toggleMode(): void {
+    this.guide.setMode(this.guide.guided() ? 'expert' : 'guided');
+    this.tools.setTool('select');
+  }
+
+  /** Stops the current tool (the hint card's Done button, same as Esc). */
+  protected stopTool(): void {
+    this.setTool('select'); // an unfinished wire is dropped, never left with a loose end
+  }
 
   /** Selects what an issue points at and zooms to it. */
   protected focusIssue(issue: Issue): void {

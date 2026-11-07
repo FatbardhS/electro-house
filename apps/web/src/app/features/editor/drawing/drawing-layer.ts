@@ -79,6 +79,9 @@ export function componentTransform(c: { x: number; y: number; rotation: number }
           @for (s of selectionRings(); track s.id) {
             <circle class="selection" [attr.cx]="s.x" [attr.cy]="s.y" [attr.r]="s.r" vector-effect="non-scaling-stroke" />
           }
+          @for (r of connectRings(); track r.id) {
+            <circle [class]="'connect connect-' + r.kind" [attr.cx]="r.x" [attr.cy]="r.y" [attr.r]="r.r" vector-effect="non-scaling-stroke" />
+          }
           @if (ghost(); as g) {
             <g class="ghost" [attr.transform]="g.transform" [style.color]="g.color"><use [attr.href]="g.href" /></g>
           }
@@ -138,6 +141,8 @@ export function componentTransform(c: { x: number; y: number; rotation: number }
     .label { font-family: Arial, Helvetica, sans-serif; font-weight: 600; paint-order: stroke; stroke: #fff; stroke-width: 0.6px; }
     .selection { fill: rgba(62, 207, 142, 0.12); stroke: #16a34a; stroke-width: 1.5; stroke-dasharray: 4 3; }
     .ghost { opacity: 0.55; }
+    .connect { fill: rgba(56, 138, 221, 0.12); stroke: #378add; stroke-width: 2; }
+    .connect-target { fill: rgba(62, 207, 142, 0.18); stroke: #16a34a; stroke-width: 2.5; }
     .wire-sel { stroke: rgba(62, 207, 142, 0.45); stroke-width: 9; }
     .wire-draft { opacity: 0.75; stroke-dasharray: 6 4; }
     .handle { stroke: #16a34a; stroke-width: 1.5; }
@@ -247,10 +252,27 @@ export class DrawingLayer {
     const type = key ? componentType(key) : undefined;
     if (this.tools.tool() !== 'place' || !type || !at) return null;
     return {
-      transform: componentTransform({ x: at.x, y: at.y, rotation: 0 }),
+      transform: componentTransform({ x: at.x, y: at.y, rotation: this.tools.placeRotation() }),
       href: `#${symbolId(type.key)}`,
       color: LAYER_COLORS[type.defaultLayer],
     };
+  });
+
+  /** Wire tool: rings on the item the wire starts from and on the item a click would connect to. */
+  protected readonly connectRings = computed(() => {
+    if (this.tools.tool() !== 'wire') return [];
+    const byId = this.drawing.byId();
+    const rings: { id: string; x: number; y: number; r: number; kind: 'start' | 'target' }[] = [];
+    const startId = this.tools.wireDraft()?.from.componentId;
+    const targetId = this.tools.connectTarget();
+    for (const [id, kind] of [
+      [startId, 'start'],
+      [targetId, 'target'],
+    ] as const) {
+      const c = id ? byId.get(id) : undefined;
+      if (c && !rings.some((r) => r.id === c.id)) rings.push({ id: c.id, x: c.x, y: c.y, r: hitRadius(c) * 1.35, kind });
+    }
+    return rings;
   });
 
   protected readonly box = computed(() => {

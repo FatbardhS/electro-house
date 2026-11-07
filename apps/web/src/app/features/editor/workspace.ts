@@ -9,10 +9,15 @@ import {
   input,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import type { PDFPageProxy } from 'pdfjs-dist';
 import {
+  DEFAULT_CABLE,
+  MM_TO_PT,
+  componentType,
   createComponent,
+  type CableDto,
   hitTest,
   hitTestWire,
   insideRect,
@@ -30,8 +35,11 @@ import {
 import { DrawingLayer } from './drawing/drawing-layer';
 import { gridSpec } from './drawing/grid';
 import { elbow, handleAt, orthoPoint, wireHandles, type WireHandle } from './drawing/wire-handles';
+import { findWall, rotationTowards, wallOffsetMm } from './drawing/wall-snap';
+import { suggestedCable } from './drawing/cable-suggest';
 import { PdfLayer } from './pdf/pdf-layer';
 import { DrawingStore } from './state/drawing.store';
+import { GuideStore } from './state/guide.store';
 import { ToolsStore, constrainOrthogonal } from './state/tools.store';
 import { ViewportStore } from './viewport/viewport.store';
 import { t } from '../../core/i18n/i18n.service';
@@ -39,8 +47,12 @@ import { t } from '../../core/i18n/i18n.service';
 const WHEEL_ZOOM_SPEED = 0.0015;
 /** Pointer must move this far (px) before a press becomes a drag. */
 const DRAG_THRESHOLD_PX = 4;
-/** Extra pick tolerance around symbols and wires, in screen pixels. */
+/** Extra pick tolerance around symbols and wires, in screen pixels (mouse / finger). */
 const PICK_TOLERANCE_PX = 4;
+const TOUCH_TOLERANCE_PX = 14;
+/** How far from the pointer (screen px) outlets and switches look for a wall to stick to. */
+const WALL_REACH_PX = 36;
+const WALL_REACH_TOUCH_PX = 52;
 export const DRAG_MIME = 'application/x-electro-component';
 
 type MoveSnap = { components: ComponentDto[]; wires: WireDto[] };
@@ -48,7 +60,11 @@ type Gesture =
   | { kind: 'pan'; last: Vec2 }
   | { kind: 'move'; start: Vec2; startScreen: Vec2; snap: MoveSnap; anchor: Vec2; wireIds: ReadonlySet<string>; dragging: boolean }
   | { kind: 'handle'; wire: WireDto; handle: WireHandle; startScreen: Vec2; dragging: boolean }
-  | { kind: 'box'; start: Vec2; additive: boolean };
+  | { kind: 'box'; start: Vec2; additive: boolean }
+  /** Touch: one finger down; a tap acts with the current tool, a drag pans. */
+  | { kind: 'tap'; start: Vec2; last: Vec2; panning: boolean }
+  /** Touch: two fingers zoom and pan. */
+  | { kind: 'pinch'; center: Vec2; distance: number };
 
 /**
  * The interactive canvas area. Converts pointer input into plan coordinates and editor actions.
@@ -98,7 +114,13 @@ export class Workspace {
   protected readonly viewport = inject(ViewportStore);
   protected readonly tools = inject(ToolsStore);
   private readonly drawing = inject(DrawingStore);
+  private readonly guide = inject(GuideStore);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+  private readonly pdf = viewChild(PdfLayer);
+  /** Active touch points (screen px), for pinch zoom. */
+  private readonly touches = new Map<number, Vec2>();
+  /** The last pointer was a finger: bigger pick tolerance and wall reach. */
+  private touch = false;
 
   readonly page = input<PDFPageProxy | null>(null);
   readonly showGrid = input(true);
@@ -113,7 +135,8 @@ export class Workspace {
 
   protected readonly cursorClass = computed(() => {
     const g = this.gesture();
-    if (g?.kind === 'pan') return 'cursor-panning';
+    if (g?.kind === 'pan' || g?.kind === 'pinch' || (g?.kind === 'tap' && g.panning)) return 'cursor-panning';
+    if (this.tools.tool() === 'wire' && this.tools.connectTarget()) return 'cursor-point';
     if ((g?.kind === 'move' || g?.kind === 'handle') && g.dragging) return 'cursor-move';
     if (this.spaceHeld() || this.tools.tool() === 'pan') return 'cursor-pan';
     if (this.tools.tool() === 'select') {
@@ -168,6 +191,13 @@ export class Workspace {
     this.host.focus({ preventScroll: true });
     const local = this.local(e);
     const tool = this.tools.tool();
+    this.touch = e.pointerType === 'touch';
+    if (this.touch) {
+      this.touches.set(e.pointerId, local);
+      this.capture(e);
+      if (this.touches.size === 2) return this.startPinch();
+      if (this.touches.size > 2) return;
+    }
     const wantsPan = e.button === 1 || (e.button === 0 && (this.spaceHeld() || tool === 'pan'));
     if (wantsPan) {
       e.preventDefault();
@@ -188,23 +218,48 @@ export class Workspace {
     const raw = this.viewport.toPlan(local);
     if (!raw) return;
 
-    if (tool === 'select') return this.selectDown(e, local, raw);
-    if (tool === 'wire') return this.wireClick(raw, e.shiftKey, e.altKey);
-    if (tool === 'place') {
-      const type = this.tools.placeType();
-      if (type) this.placeAt(type, this.snapped(raw, e.altKey));
+    // Fingers: act on a tap (when the finger lifts), so a drag or a second finger can pan and zoom instead.
+    if (this.touch && tool !== 'select') {
+      this.gesture.set({ kind: 'tap', start: local, last: local, panning: false });
       return;
     }
+    if (tool === 'select') return this.selectDown(e, local, raw);
+    this.act(local, e.shiftKey, e.altKey);
+  }
 
-    const p = this.toolPoint(local, e.shiftKey);
+  /** Click (or tap) with the current drawing tool at a screen point. */
+  private act(local: Vec2, shift: boolean, alt: boolean): void {
+    const tool = this.tools.tool();
+    const raw = this.viewport.toPlan(local);
+    if (!raw) return;
+    if (tool === 'wire') return this.wireClick(raw, shift, alt);
+    if (tool === 'place') {
+      const type = this.tools.placeType();
+      if (type) {
+        const p = this.placement(type, local, raw, alt);
+        this.placeAt(type, p.at, p.rotation);
+      }
+      return;
+    }
+    const p = this.toolPoint(local, shift);
     if (!p) return;
     if (tool === 'measure') this.tools.addMeasurePoint(p);
     if (tool === 'calibrate' && !this.calibrationLocked()) this.tools.addCalibrationPoint(p);
   }
 
+  /** Two fingers on the plan: cancel what one finger started and zoom/pan instead. */
+  private startPinch(): void {
+    const g = this.gesture();
+    if (g?.kind === 'move' && g.dragging) this.drawing.preview({ components: g.snap.components, wires: g.snap.wires });
+    if (g?.kind === 'handle' && g.dragging) this.drawing.preview({ wires: [g.wire] });
+    this.tools.selectBox.set(null);
+    const [a, b] = [...this.touches.values()] as [Vec2, Vec2];
+    this.gesture.set({ kind: 'pinch', center: mid(a, b), distance: Math.max(1, dist(a, b)) });
+  }
+
   private selectDown(e: PointerEvent, local: Vec2, raw: Vec2): void {
     const additive = e.shiftKey || e.ctrlKey || e.metaKey;
-    const tol = PICK_TOLERANCE_PX / this.zoom();
+    const tol = this.tol();
 
     // 1. Handles of a single selected wire (bend points, segment midpoints, ends).
     const handle = this.handleUnder(local);
@@ -239,14 +294,35 @@ export class Workspace {
       return;
     }
 
-    // 3. Empty space: box selection (or clear on a plain click).
+    // 3. Empty space: box selection (or clear on a plain click). A finger pans instead.
     this.capture(e);
+    if (this.touch) {
+      this.gesture.set({ kind: 'tap', start: local, last: local, panning: false });
+      return;
+    }
     this.gesture.set({ kind: 'box', start: local, additive });
   }
 
   protected onPointerMove(e: PointerEvent): void {
     const local = this.local(e);
     const g = this.gesture();
+    if (e.pointerType === 'touch' && this.touches.has(e.pointerId)) this.touches.set(e.pointerId, local);
+    if (g?.kind === 'pinch') {
+      if (this.touches.size < 2) return;
+      const [a, b] = [...this.touches.values()] as [Vec2, Vec2];
+      const center = mid(a, b);
+      const distance = Math.max(1, dist(a, b));
+      this.viewport.panBy({ x: center.x - g.center.x, y: center.y - g.center.y });
+      this.viewport.zoomAtPoint(center, distance / g.distance);
+      this.gesture.set({ kind: 'pinch', center, distance });
+      return;
+    }
+    if (g?.kind === 'tap') {
+      if (!g.panning && dist(local, g.start) < DRAG_THRESHOLD_PX * 2) return;
+      this.viewport.panBy({ x: local.x - g.last.x, y: local.y - g.last.y });
+      this.gesture.set({ ...g, last: local, panning: true });
+      return;
+    }
     if (g?.kind === 'pan') {
       this.viewport.panBy({ x: local.x - g.last.x, y: local.y - g.last.y });
       this.gesture.set({ ...g, last: local });
@@ -280,24 +356,44 @@ export class Workspace {
     const tool = this.tools.tool();
     const raw = this.viewport.toPlan(local);
     if (tool === 'select') {
-      const tol = PICK_TOLERANCE_PX / this.zoom();
+      const tol = this.tol();
       const over = !!raw && (!!hitTest(this.drawing.selectable(), raw, tol) || !!hitTestWire(this.drawing.selectableWires(), raw, tol, this.drawing.lookup()));
       this.hover.set(this.handleUnder(local) ? 'handle' : over ? 'object' : 'none');
       this.tools.cursor.set(raw);
     } else if (tool === 'place') {
-      this.tools.cursor.set(raw ? this.snapped(raw, e.altKey) : null);
+      const type = this.tools.placeType();
+      const p = raw && type ? this.placement(type, local, raw, e.altKey) : null;
+      this.tools.cursor.set(p?.at ?? null);
+      this.tools.placeRotation.set(p?.rotation ?? 0);
+      this.tools.onWall.set(p?.onWall ?? false);
     } else if (tool === 'wire') {
-      this.tools.cursor.set(raw ? this.wirePoint(raw, e.shiftKey, e.altKey).point : null);
+      const w = raw ? this.wirePoint(raw, e.shiftKey, e.altKey) : null;
+      this.tools.cursor.set(w?.point ?? null);
+      this.tools.connectTarget.set(w?.component?.id ?? null);
     } else {
       this.tools.cursor.set(this.toolPoint(local, e.shiftKey));
     }
   }
 
   protected onPointerUp(e: PointerEvent): void {
+    const wasTouch = this.touches.delete(e.pointerId);
     const g = this.gesture();
     if (!g) return;
+    if (g.kind === 'pinch') {
+      // Lifting one finger ends the pinch; the other finger does nothing until it is lifted too.
+      if (this.host.hasPointerCapture(e.pointerId)) this.host.releasePointerCapture(e.pointerId);
+      if (this.touches.size === 0) this.gesture.set(null);
+      return;
+    }
     this.gesture.set(null);
     if (this.host.hasPointerCapture(e.pointerId)) this.host.releasePointerCapture(e.pointerId);
+
+    if (g.kind === 'tap') {
+      if (g.panning || !wasTouch || e.type === 'pointercancel') return;
+      if (this.tools.tool() === 'select') this.drawing.clearSelection();
+      else this.act(g.start, false, false);
+      return;
+    }
 
     if (g.kind === 'move' && g.dragging) {
       const n = g.snap.components.length + g.wireIds.size;
@@ -358,7 +454,7 @@ export class Workspace {
 
   /** Where a wire click lands: on a component port (connects) or a snapped, optionally orthogonal point. */
   private wirePoint(raw: Vec2, shift: boolean, alt: boolean): { point: Vec2; component: ComponentDto | null } {
-    const comp = hitTest(this.drawing.selectable(), raw, PICK_TOLERANCE_PX / this.zoom());
+    const comp = hitTest(this.drawing.selectable(), raw, this.tol());
     if (comp) return { point: portPosition(comp, 'p'), component: comp };
     let p = this.snapped(raw, alt);
     const draft = this.tools.wireDraft();
@@ -389,6 +485,8 @@ export class Workspace {
         if (corner) points.push(corner);
       }
       this.commitWire(draft.from, end, points);
+      // Guided: keep going from the item just reached, so a chain of outlets is a row of clicks.
+      if (this.guide.guided()) this.tools.wireDraft.set({ from: end, points: [] });
       return;
     }
     const last = draft.points.at(-1) ?? this.endPoint(draft.from);
@@ -416,12 +514,22 @@ export class Workspace {
       from,
       to,
       points,
-      cable: { ...this.tools.wireCable() },
+      cable: this.cableFor(from, to),
       circuitId: null,
       description: null,
     };
     this.drawing.addWire(w);
     this.tools.wireDraft.set(null);
+  }
+
+  /**
+   * Cable for a new wire: the last cable chosen. In guided mode, while no cable was chosen yet,
+   * a sensible size is picked from what the wire connects: 2.5 mm² for outlets, 5 cores for three-phase.
+   */
+  private cableFor(from: WireEndDto, to: WireEndDto): CableDto {
+    const chosen = { ...this.tools.wireCable() };
+    if (!this.guide.guided() || JSON.stringify(chosen) !== JSON.stringify(DEFAULT_CABLE)) return chosen;
+    return { ...chosen, ...suggestedCable([from, to].map((e) => (e.componentId ? this.drawing.byId().get(e.componentId)?.typeKey : undefined))) };
   }
 
   private endPoint(end: WireEndDto): Vec2 {
@@ -448,7 +556,7 @@ export class Workspace {
       points.splice(h.index, 0, p);
       return { ...w, points };
     }
-    const comp = final ? hitTest(this.drawing.selectable(), p, PICK_TOLERANCE_PX / this.zoom()) : null;
+    const comp = final ? hitTest(this.drawing.selectable(), p, this.tol()) : null;
     const end: WireEndDto = comp
       ? { componentId: comp.id, portId: 'p', ...portPosition(comp, 'p') }
       : { componentId: null, portId: null, x: p.x, y: p.y };
@@ -468,14 +576,39 @@ export class Workspace {
     const type = e.dataTransfer?.getData(DRAG_MIME);
     if (!type) return;
     e.preventDefault();
-    const p = this.viewport.toPlan(this.local(e));
-    if (p) this.placeAt(type, this.snapped(p, e.altKey));
+    const local = this.local(e);
+    const p = this.viewport.toPlan(local);
+    if (p) {
+      const at = this.placement(type, local, p, e.altKey);
+      this.placeAt(type, at.at, at.rotation);
+    }
     this.host.focus({ preventScroll: true });
   }
 
-  private placeAt(typeKey: string, at: Vec2): void {
+  private placeAt(typeKey: string, at: Vec2, rotation = 0): void {
     const c = createComponent(typeKey, at, uuidv7(), this.drawing.components());
-    this.drawing.add([c]);
+    this.drawing.add([{ ...c, rotation }]);
+  }
+
+  /**
+   * Where a component lands. Guided mode: outlets, switches and wall lights stick to the nearest wall
+   * of the plan, facing it (Alt places freely). Otherwise the grid snap applies.
+   */
+  private placement(typeKey: string, local: Vec2, raw: Vec2, alt: boolean): { at: Vec2; rotation: number; onWall: boolean } {
+    const offset = wallOffsetMm(typeKey);
+    if (offset !== null && this.guide.guided() && !alt && componentType(typeKey)) {
+      const reach = this.touch ? WALL_REACH_TOUCH_PX : WALL_REACH_PX;
+      const dark = this.pdf()?.darkSampler(local, reach + 48);
+      const hit = dark ? findWall(dark, local, reach) : null;
+      if (hit) {
+        const px = offset * MM_TO_PT * this.zoom();
+        const at = this.viewport.toPlan({ x: hit.face.x - hit.toWall.x * px, y: hit.face.y - hit.toWall.y * px });
+        const a = this.viewport.toPlan(hit.face);
+        const b = this.viewport.toPlan({ x: hit.face.x + hit.toWall.x, y: hit.face.y + hit.toWall.y });
+        if (at && a && b) return { at, rotation: rotationTowards({ x: b.x - a.x, y: b.y - a.y }), onWall: true };
+      }
+    }
+    return { at: this.snapped(raw, alt), rotation: 0, onWall: false };
   }
 
   // ── helpers ──
@@ -491,6 +624,11 @@ export class Workspace {
 
   private zoom(): number {
     return this.viewport.view()?.zoom ?? 1;
+  }
+
+  /** Pick tolerance in plan units: generous for fingers. */
+  private tol(): number {
+    return (this.touch ? TOUCH_TOLERANCE_PX : PICK_TOLERANCE_PX) / this.zoom();
   }
 
   /** Snaps to the visible grid when snapping is on and Alt is not held. */
@@ -533,6 +671,10 @@ export class Workspace {
 
 function dist(a: Vec2, b: Vec2): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function mid(a: Vec2, b: Vec2): Vec2 {
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }
 
 function isTyping(e: KeyboardEvent): boolean {

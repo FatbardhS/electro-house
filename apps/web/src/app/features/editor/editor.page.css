@@ -317,3 +317,90 @@
     display: none;
   }
 }
+
+/* ── Guided editor ── */
+.mode {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-input);
+}
+.mode button {
+  height: 26px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font: 600 12px var(--font);
+  cursor: pointer;
+}
+.mode button.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.stepbar {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.body.guided {
+  grid-template-columns: 64px 280px 1fr 290px;
+}
+.view-controls {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  display: flex;
+  gap: 6px;
+  z-index: 2;
+}
+.view-controls .btn {
+  min-height: 40px;
+  min-width: 40px;
+  justify-content: center;
+  font-size: 14px;
+  background: var(--bg-elev);
+  box-shadow: var(--shadow);
+}
+.floor-details {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.floor-details summary {
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+.floor-details .kv {
+  margin-top: 4px;
+}
+@media (max-width: 1100px) {
+  .body.guided {
+    grid-template-columns: 56px 240px 1fr 250px;
+  }
+}
+/* Tablets: guided mode keeps both panels (items on the left, scale and details on the right), narrower. */
+@media (max-width: 900px) {
+  .body.guided {
+    grid-template-columns: 52px 200px 1fr 230px;
+  }
+  .body.guided .left,
+  .body.guided .panel {
+    display: flex;
+  }
+  .body.guided .panel {
+    padding: 10px;
+  }
+  /* Undo and zoom are on the plan in guided mode; keep the toolbar to one line. */
+  :host:has(.body.guided) .narrow-hide,
+  :host:has(.body.guided) .page-select .faint {
+    display: none;
+  }
+  .floor-select {
+    width: 130px;
+  }
+}

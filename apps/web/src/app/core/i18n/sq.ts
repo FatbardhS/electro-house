@@ -4,6 +4,7 @@ import { SQ_EDITOR } from './sq-editor';
 import { SQ_INSTALLATION } from './sq-installation';
 import { SQ_SETTINGS } from './sq-settings';
 import { SQ_ADMIN } from './sq-admin';
+import { SQ_GUIDE } from './sq-guide';
 
 /**
  * Albanian dictionary, keyed by the English text. Split by area so each file stays readable.
@@ -17,6 +18,7 @@ export const SQ = {
   ...SQ_INSTALLATION,
   ...SQ_SETTINGS,
   ...SQ_ADMIN,
+  ...SQ_GUIDE,
 } as const;
 
 export type TKey = keyof typeof SQ;

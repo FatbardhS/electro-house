@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { CATEGORIES, CATEGORY_NAMES, searchCatalog, type Category, type ComponentType } from '@electro/shared';
 import { LAYER_COLORS, symbolId } from '../drawing/symbol-defs';
 import { ToolsStore } from '../state/tools.store';
@@ -59,15 +59,19 @@ export class LibraryPanel {
   protected readonly query = signal('');
   private readonly open = signal<ReadonlySet<Category>>(new Set(['lighting', 'outlets', 'switches']));
 
+  /** Only these categories (guided editor steps); all when not set. */
+  readonly categories = input<readonly Category[] | null>(null);
+
   protected readonly groups = computed(() => {
     const found = searchCatalog(this.query());
-    return CATEGORIES.map((category) => ({ category, items: found.filter((t) => t.category === category) })).filter(
+    const only = this.categories();
+    return CATEGORIES.filter((c) => !only || only.includes(c)).map((category) => ({ category, items: found.filter((t) => t.category === category) })).filter(
       (g) => g.items.length > 0,
     );
   });
 
   protected isOpen(c: Category): boolean {
-    return !!this.query().trim() || this.open().has(c);
+    return !!this.query().trim() || this.open().has(c) || this.categories()?.length === 1;
   }
 
   protected toggle(c: Category): void {

@@ -30,6 +30,12 @@ export class ToolsStore {
   readonly wireOrtho = signal(true);
   /** Cable used for new wires (the last cable chosen in the properties panel). */
   readonly wireCable = signal<CableDto>({ ...DEFAULT_CABLE });
+  /** Rotation of the component about to be placed (turned towards a wall when it sticks to one). */
+  readonly placeRotation = signal(0);
+  /** The component about to be placed is stuck to a wall. */
+  readonly onWall = signal(false);
+  /** Wire tool: component under the pointer that a click would connect to. */
+  readonly connectTarget = signal<string | null>(null);
   /** Cursor position in plan coordinates while over the plan; null when outside. */
   readonly cursor = signal<Vec2 | null>(null);
   /** True while Shift is held: constrain to horizontal/vertical on screen. */
@@ -52,6 +58,9 @@ export class ToolsStore {
     this.tool.set(tool);
     this.selectBox.set(null);
     this.wireDraft.set(null);
+    this.placeRotation.set(0);
+    this.onWall.set(false);
+    this.connectTarget.set(null);
     this.clearMeasure();
     this.calibrationPoints.set([]);
   }

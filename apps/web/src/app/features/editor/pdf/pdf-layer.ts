@@ -68,6 +68,38 @@ export class PdfLayer implements OnDestroy {
     });
   }
 
+  /**
+   * Reads the visible plan bitmap around a screen point (CSS px) and returns a "is it dark here" test,
+   * used to find walls. Null while the bitmap is being moved or re-rendered (it would not match the screen).
+   */
+  darkSampler(center: { x: number; y: number }, radius: number): ((x: number, y: number) => boolean) | null {
+    const canvas = this.canvasRef().nativeElement;
+    if (!this.rendered || canvas.style.transform !== 'none' || canvas.style.visibility === 'hidden') return null;
+    const scale = canvas.width / Math.max(1, this.rendered.size.width);
+    const r = Math.ceil(radius * scale);
+    const cx = Math.round(center.x * scale);
+    const cy = Math.round(center.y * scale);
+    const x0 = Math.max(0, cx - r);
+    const y0 = Math.max(0, cy - r);
+    const w = Math.min(canvas.width, cx + r + 1) - x0;
+    const h = Math.min(canvas.height, cy + r + 1) - y0;
+    if (w <= 0 || h <= 0) return null;
+    let data: Uint8ClampedArray;
+    try {
+      data = canvas.getContext('2d')!.getImageData(x0, y0, w, h).data;
+    } catch {
+      return null;
+    }
+    return (x, y) => {
+      const px = Math.round(x * scale) - x0;
+      const py = Math.round(y * scale) - y0;
+      if (px < 0 || py < 0 || px >= w || py >= h) return false;
+      const i = (py * w + px) * 4;
+      if (data[i + 3]! < 128) return false;
+      return 0.299 * data[i]! + 0.587 * data[i + 1]! + 0.114 * data[i + 2]! < 110;
+    };
+  }
+
   ngOnDestroy(): void {
     this.destroyed = true;
     clearTimeout(this.timer);
